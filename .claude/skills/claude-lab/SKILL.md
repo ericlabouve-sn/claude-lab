@@ -212,8 +212,17 @@ fi
 For interactive notifications, install `alerter`:
 
 ```bash
-brew install --cask alerter
-# or download from: https://github.com/vjeantet/alerter/releases
+# Download from GitHub
+curl -L https://github.com/vjeantet/alerter/releases/download/003/alerter.zip -o /tmp/alerter.zip
+unzip -o /tmp/alerter.zip -d /tmp
+sudo mv /tmp/alerter /usr/local/bin/alerter
+sudo chmod +x /usr/local/bin/alerter
+
+# Remove macOS quarantine (bypass Gatekeeper)
+sudo xattr -d com.apple.quarantine /usr/local/bin/alerter
+
+# Clean up
+rm /tmp/alerter.zip
 ```
 
 Configure in settings:

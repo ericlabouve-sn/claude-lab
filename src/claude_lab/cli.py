@@ -273,8 +273,8 @@ def check_system():
             console.print("  ✓ alerter    [green]OK[/green] - Interactive notifications")
         else:
             console.print("  ✗ alerter    [yellow]OPTIONAL[/yellow] - For macOS system notifications")
-            console.print("    [dim]Install: brew install --cask alerter[/dim]")
-            console.print("    [dim]Or download: https://github.com/vjeantet/alerter/releases[/dim]")
+            console.print("    [dim]Download: https://github.com/vjeantet/alerter/releases[/dim]")
+            console.print("    [dim]Then run: sudo xattr -d com.apple.quarantine /usr/local/bin/alerter[/dim]")
 
     return all_ok
 
@@ -809,8 +809,8 @@ additional_mounts: []
 environment: {}
 
 # macOS system notifications (requires alerter)
-# Install: brew install --cask alerter
-# Or download: https://github.com/vjeantet/alerter/releases
+# Download: https://github.com/vjeantet/alerter/releases
+# After install: sudo xattr -d com.apple.quarantine /usr/local/bin/alerter
 macos_notifications:
   enabled: true                    # Enable macOS system notification banners
   click_action: "gui"              # Action when banner is clicked: "gui" to open lab GUI
@@ -847,8 +847,8 @@ auto_cleanup:
     if sys.platform == "darwin":
         if not shutil.which("alerter"):
             console.print(f"\n[yellow]💡 Optional: Install alerter for macOS system notifications[/yellow]")
-            console.print(f"   [dim]brew install --cask alerter[/dim]")
-            console.print(f"   [dim]or download: https://github.com/vjeantet/alerter/releases[/dim]")
+            console.print(f"   [dim]Download: https://github.com/vjeantet/alerter/releases[/dim]")
+            console.print(f"   [dim]Then run: sudo xattr -d com.apple.quarantine /usr/local/bin/alerter[/dim]")
             console.print(f"   [dim]Enables interactive notification banners with reply capability[/dim]")
 
 
