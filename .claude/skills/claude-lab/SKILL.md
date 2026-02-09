@@ -1,7 +1,7 @@
 ---
 name: claude-lab
-description: Use this skill when you need to start a new branch/task in an isolated environment with its own k3d cluster, git worktree, and tmux session. Supports GUI mode, global/project settings, and custom Docker images.
-argument-hint: setup <name> [--branch <branch>] [--image <image>] | list | teardown <name> | gui | init [--global]
+description: Use this skill when you need to start a new branch/task in an isolated environment with its own k3d cluster, git worktree, and tmux session. Supports GUI mode, global/project settings, custom Docker images, and seamless domain access via reverse proxy.
+argument-hint: setup <name> [--branch <branch>] [--image <image>] | list | teardown <name> | gui | proxy start | dns setup | init [--global]
 user-invocable: true
 ---
 
@@ -15,6 +15,8 @@ Use this skill when you need to start a new branch/task in an isolated environme
 - **Teardown:** Clean up all resources (cluster, worktree, tmux session) after a task is finished
 - **List:** View all active lab environments with their status and ports
 - **GUI Mode:** Interactive terminal UI for managing labs with keyboard navigation
+- **Reverse Proxy:** Seamless domain access (http://lab-name.local/) via Caddy proxy
+- **DNS Management:** Wildcard DNS for *.local domains via dnsmasq
 - **Settings:** Global (`~/.lab/`) and project-level (`.lab/`) configuration support
 - **Init:** Initialize settings directories with defaults
 - **Port Registry:** Automatically avoids port collisions between parallel clusters
@@ -103,6 +105,49 @@ Launch an interactive terminal UI with:
 - `n` - Create new lab (shows instructions)
 - `d` - Delete lab (shows instructions)
 - `q` - Quit GUI
+
+### Seamless Domain Access (Reverse Proxy + DNS)
+
+Access labs via `http://lab-name.local/` instead of port numbers:
+
+```bash
+# One-time setup (requires sudo for DNS)
+lab dns setup      # Configure dnsmasq for *.local wildcard DNS
+lab proxy start    # Start Caddy reverse proxy on port 80
+
+# Create a lab (auto-registers routes!)
+lab setup my-lab
+
+# Access seamlessly:
+http://my-lab.local/
+http://api.my-lab.local/
+http://subdomain.my-lab.local/
+```
+
+**How it works:**
+- **DNS (dnsmasq)**: Resolves all `*.local` domains to `127.0.0.1`
+- **Proxy (Caddy in Docker)**: Routes `*.lab-name.local` → `localhost:port`
+- **Auto-registration**: Routes added/removed automatically during setup/teardown
+- **Zero-downtime**: Routes updated via Caddy admin API without restarts
+
+**Proxy commands:**
+```bash
+lab proxy start          # Start Caddy on port 80
+lab proxy stop           # Stop proxy
+lab proxy restart        # Restart proxy
+lab proxy status         # Show all routes
+lab proxy logs -f        # Follow logs
+```
+
+**DNS commands:**
+```bash
+lab dns setup    # Complete DNS configuration
+lab dns status   # Check configuration
+lab dns test     # Test DNS resolution
+lab dns restart  # Restart dnsmasq
+```
+
+**Note:** If Docker Desktop crashes, restart the proxy with `lab proxy start`. This does NOT overwrite your settings - it only restarts the Caddy container.
 
 ### Tearing Down an Environment
 

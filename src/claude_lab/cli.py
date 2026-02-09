@@ -891,6 +891,9 @@ docker_image: "claude"
 # Starting port number for lab HTTP services
 # Each lab gets: HTTP port (base_port) and API port (base_port + 1000)
 # Default: 8080
+# Note: Use reverse proxy for seamless access via http://lab-name.local/
+#   - lab proxy start   # Start proxy on port 80
+#   - lab dns setup     # Configure DNS for *.local domains
 base_port: 8080
 
 # Additional volume mounts to include in all labs

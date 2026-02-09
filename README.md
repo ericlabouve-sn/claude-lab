@@ -8,6 +8,7 @@ Claude Lab Manager allows you to:
 
 - **Spin up isolated development environments** with their own k3d clusters, git worktrees, and tmux sessions
 - **Run multiple Claude instances in parallel** working on different branches/features simultaneously
+- **Access labs via domains** (http://lab-name.local/) instead of port numbers using reverse proxy + DNS
 - **Auto-manage port allocation** to avoid conflicts between parallel clusters
 - **Share SSH credentials** between host and sandbox for seamless git operations
 - **Send notifications** from lab instances back to the main session
@@ -106,6 +107,26 @@ lab install --dry-run
 # Actually install
 lab install
 ```
+
+### Optional: Seamless Domain Access
+
+Access labs via `http://lab-name.local/` instead of `http://localhost:8081/`:
+
+```bash
+# One-time setup (requires sudo for DNS)
+lab dns setup      # Configure wildcard *.local DNS
+lab proxy start    # Start reverse proxy on port 80
+
+# Now all labs are accessible via domains!
+lab setup my-lab   # Access at http://my-lab.local/
+```
+
+**How it works:**
+- **DNS**: Resolves `*.local` domains to `127.0.0.1`
+- **Proxy**: Routes `*.lab-name.local` → lab's port (8081, 8082, etc.)
+- **Auto-registration**: Routes managed automatically during setup/teardown
+
+**Note:** If Docker Desktop crashes, restart proxy with `lab proxy start` (won't affect settings).
 
 ## Usage
 
