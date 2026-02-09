@@ -26,6 +26,14 @@ console = Console()
 REGISTRY_PATH = Path.home() / ".claude-lab-port-registry.json"
 NOTIFICATIONS_PATH = Path.home() / ".claude-lab-notifications.jsonl"
 
+# Import proxy and DNS managers
+try:
+    from claude_lab.proxy import ProxyManager
+    from claude_lab.dns import DNSManager
+    PROXY_AVAILABLE = True
+except ImportError:
+    PROXY_AVAILABLE = False
+
 # Configuration from environment variables (global defaults)
 WORKTREE_BASE_DIR = os.environ.get("CLAUDE_LAB_WORKTREE_DIR", "/tmp/claude-labs")
 BASE_PORT = int(os.environ.get("CLAUDE_LAB_BASE_PORT", "8080"))
@@ -588,6 +596,19 @@ def setup(name, branch, image):
         if len(project_env) > 3:
             console.print(f"  [dim]... and {len(project_env) - 3} more[/dim]")
 
+    # Auto-register with proxy if running
+    if PROXY_AVAILABLE:
+        proxy = ProxyManager()
+        if proxy.is_running():
+            console.print(f"\n[dim]Registering routes with proxy...[/dim]")
+            proxy.register_lab(name, port)
+            console.print(f"\n[bold green]🌐 Access via: http://{name}.local/[/bold green]")
+            console.print(f"[dim]Or subdomains: http://subdomain.{name}.local/[/dim]")
+        else:
+            console.print(f"\n[dim]💡 Tip: Start proxy for seamless domain access:[/dim]")
+            console.print(f"[dim]   lab proxy start[/dim]")
+            console.print(f"[dim]   Then access via: http://{name}.local/[/dim]")
+
 
 @cli.command()
 @click.argument("name")
@@ -661,6 +682,12 @@ def teardown(name, force):
             stderr=subprocess.DEVNULL,
         )
         progress.update(task3, completed=True)
+
+    # Unregister from proxy if running
+    if PROXY_AVAILABLE:
+        proxy = ProxyManager()
+        if proxy.is_running():
+            proxy.unregister_lab(name)
 
     # Remove from registry
     del reg[name]
@@ -1305,6 +1332,114 @@ def gui(focus):
         sys.exit(1)
 
 
+# ============================================================================
+# Proxy Commands
+# ============================================================================
+
+@cli.group()
+def proxy():
+    """Manage reverse proxy for seamless domain access"""
+    pass
+
+
+@proxy.command(name="start")
+@click.option("--force", is_flag=True, help="Force start even if port 80 is in use")
+def proxy_start(force):
+    """Start Caddy reverse proxy on port 80"""
+    if not PROXY_AVAILABLE:
+        console.print("[red]Proxy module not available[/red]")
+        return
+    ProxyManager().start(force=force)
+
+
+@proxy.command(name="stop")
+@click.option("--remove", is_flag=True, help="Remove container (not just stop)")
+def proxy_stop(remove):
+    """Stop Caddy reverse proxy"""
+    if not PROXY_AVAILABLE:
+        console.print("[red]Proxy module not available[/red]")
+        return
+    ProxyManager().stop(remove=remove)
+
+
+@proxy.command(name="restart")
+def proxy_restart():
+    """Restart Caddy reverse proxy"""
+    if not PROXY_AVAILABLE:
+        console.print("[red]Proxy module not available[/red]")
+        return
+    ProxyManager().restart()
+
+
+@proxy.command(name="status")
+def proxy_status():
+    """Show proxy status and routes"""
+    if not PROXY_AVAILABLE:
+        console.print("[red]Proxy module not available[/red]")
+        return
+    ProxyManager().status()
+
+
+@proxy.command(name="logs")
+@click.option("--follow", "-f", is_flag=True, help="Follow log output")
+def proxy_logs(follow):
+    """Show Caddy logs"""
+    if not PROXY_AVAILABLE:
+        console.print("[red]Proxy module not available[/red]")
+        return
+    ProxyManager().logs(follow=follow)
+
+
+# ============================================================================
+# DNS Commands
+# ============================================================================
+
+@cli.group()
+def dns():
+    """Manage DNS configuration for *.local domains"""
+    pass
+
+
+@dns.command(name="setup")
+def dns_setup():
+    """Complete DNS setup for wildcard .local resolution"""
+    if not PROXY_AVAILABLE:
+        console.print("[red]DNS module not available[/red]")
+        return
+    DNSManager().setup()
+
+
+@dns.command(name="status")
+def dns_status():
+    """Show DNS configuration status"""
+    if not PROXY_AVAILABLE:
+        console.print("[red]DNS module not available[/red]")
+        return
+    DNSManager().status()
+
+
+@dns.command(name="test")
+def dns_test():
+    """Test DNS resolution"""
+    if not PROXY_AVAILABLE:
+        console.print("[red]DNS module not available[/red]")
+        return
+    DNSManager().test()
+
+
+@dns.command(name="restart")
+def dns_restart():
+    """Restart dnsmasq service"""
+    if not PROXY_AVAILABLE:
+        console.print("[red]DNS module not available[/red]")
+        return
+    DNSManager().restart()
+
+
+# ============================================================================
+# Interactive Menu
+# ============================================================================
+
 def interactive_menu():
     """Display interactive menu when no command is given"""
     console.print(Panel.fit(
@@ -1339,6 +1474,8 @@ def interactive_menu():
     console.print("  teardown <name>    Remove a lab environment")
     console.print("  list               Show all environments")
     console.print("  check              Verify system requirements")
+    console.print("  proxy              Manage reverse proxy (seamless domains)")
+    console.print("  dns                Manage DNS configuration")
     console.print("  notify             Send a notification")
     console.print("  notifications      View notification history")
     console.print("\n[dim]Run with --help for more options[/dim]")
