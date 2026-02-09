@@ -163,7 +163,7 @@ lab notify --message "Tests passed!" --level success --source "feature-auth"
 
 On macOS (with `alerter` installed), notifications appear as system banners with:
 - **Reply button**: User can type a quick response (with `--request-response`)
-- **Click action**: Opens Claude Lab GUI to see all labs and interact
+- **Click action**: Directly opens Terminal with the lab's tmux session for immediate interaction with Claude
 - **Auto-dismiss**: Closes after 30 seconds if ignored
 
 ### Checking for User Responses
@@ -231,7 +231,7 @@ Configure in settings:
 # .lab/settings.yaml or ~/.lab/settings.yaml
 macos_notifications:
   enabled: true           # Enable system notifications
-  click_action: "gui"     # Open lab GUI when banner is clicked
+  click_action: "gui"     # Open Terminal with tmux session when banner is clicked
 ```
 
 ## Image Management

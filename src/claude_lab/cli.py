@@ -207,19 +207,19 @@ def _send_macos_notification(message, level, source, request_response, settings)
 
             console.print(f"\n[green]✅ User responded: {reply}[/green]")
 
-            # If user clicked the notification (not typed), open GUI with focus
+            # If user clicked the notification (not typed), open Terminal with tmux session
             gui_action = settings.get("click_action", "gui")
             if reply == "@CONTENTCLICKED" and gui_action == "gui":
-                console.print(f"[cyan]Opening GUI with focus on {source}...[/cyan]")
-                # Use osascript to open Terminal with lab gui
+                console.print(f"[cyan]Opening Terminal with tmux session for {source}...[/cyan]")
+                # Use osascript to open Terminal with tmux attach
                 try:
                     subprocess.run([
                         "osascript",
                         "-e", "tell application \"Terminal\" to activate",
-                        "-e", f'tell application "Terminal" to do script "lab gui --focus {source}"'
+                        "-e", f'tell application "Terminal" to do script "tmux attach -t {source}"'
                     ], check=False)
                 except Exception as e:
-                    console.print(f"[yellow]Could not open GUI: {e}[/yellow]")
+                    console.print(f"[yellow]Could not open Terminal: {e}[/yellow]")
 
             return reply
 

@@ -18,9 +18,12 @@ from textual.widgets import (
     ListItem,
     ListView,
     Static,
+    RichLog,
 )
 from textual.binding import Binding
 from textual.reactive import reactive
+import threading
+import time
 
 REGISTRY_PATH = Path.home() / ".claude-lab-port-registry.json"
 NOTIFICATIONS_PATH = Path.home() / ".claude-lab-notifications.jsonl"
@@ -201,6 +204,7 @@ class ClaudeLabGUI(App):
         Binding("n", "new_lab", "New Lab"),
         Binding("d", "delete_lab", "Delete"),
         Binding("a", "attach", "Attach"),
+        Binding("enter", "attach", "Attach", show=False),  # Enter also attaches
     ]
 
     def __init__(self, focus_lab=None):
@@ -315,16 +319,30 @@ class ClaudeLabGUI(App):
             notifications.selected_lab = name
 
     def action_attach(self):
-        """Attach to the selected lab's tmux session"""
+        """Attach to the selected lab's tmux session in a new Terminal window"""
         selected = self.get_selected_lab()
         if not selected:
+            self.notify("No lab selected")
             return
 
-        name, _ = selected
+        name, info = selected
 
-        # Exit the TUI and attach to tmux
-        self.exit()
-        subprocess.run(["tmux", "attach", "-t", name])
+        # Check if tmux session is running
+        if not check_tmux_session(name):
+            self.notify(f"Lab '{name}' tmux session is not running")
+            return
+
+        # Open a new Terminal window with tmux attach
+        # This keeps the GUI running while opening the session
+        try:
+            subprocess.Popen([
+                "osascript",
+                "-e", "tell application \"Terminal\" to activate",
+                "-e", f'tell application "Terminal" to do script "tmux attach -t {name}"'
+            ])
+            self.notify(f"Opening tmux session for '{name}' in new Terminal window")
+        except Exception as e:
+            self.notify(f"Failed to open terminal: {e}", severity="error")
 
     def action_new_lab(self):
         """Create a new lab"""
