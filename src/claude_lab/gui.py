@@ -203,9 +203,10 @@ class ClaudeLabGUI(App):
         Binding("a", "attach", "Attach"),
     ]
 
-    def __init__(self):
+    def __init__(self, focus_lab=None):
         super().__init__()
         self.labs_registry = {}
+        self.focus_lab = focus_lab  # Lab to focus on when GUI opens
 
     def compose(self) -> ComposeResult:
         """Create child widgets"""
@@ -242,7 +243,8 @@ class ClaudeLabGUI(App):
             lab_list.append(ListItem(Label("[dim]No active labs[/dim]")))
             return
 
-        for name, info in self.labs_registry.items():
+        focus_index = 0  # Default to first item
+        for idx, (name, info) in enumerate(self.labs_registry.items()):
             status = "🟢" if check_tmux_session(name) else "🔴"
             branch = info.get("branch", "?")
             port = info.get("port", "?")
@@ -250,9 +252,15 @@ class ClaudeLabGUI(App):
             label = Label(f"{status} [cyan]{name}[/cyan] ({branch}:{port})")
             lab_list.append(ListItem(label))
 
-        # Auto-select first item
+            # Track index of lab to focus on
+            if self.focus_lab and name == self.focus_lab:
+                focus_index = idx
+
+        # Auto-select focused lab or first item
         if len(lab_list.children) > 0:
-            lab_list.index = 0
+            lab_list.index = focus_index
+            # Clear focus_lab after first use
+            self.focus_lab = None
 
     def on_list_view_selected(self, event: ListView.Selected):
         """Handle lab selection"""
@@ -337,9 +345,9 @@ class ClaudeLabGUI(App):
         self.notify(f"Lab deletion via GUI coming soon! Use 'lab teardown {name}' for now.")
 
 
-def run_gui():
+def run_gui(focus_lab=None):
     """Entry point for the GUI"""
-    app = ClaudeLabGUI()
+    app = ClaudeLabGUI(focus_lab=focus_lab)
     app.run()
 
 

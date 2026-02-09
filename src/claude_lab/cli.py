@@ -178,13 +178,8 @@ def _send_macos_notification(message, level, source, request_response, settings)
     if request_response:
         cmd.extend(["-reply", "-dropdownLabel", "Quick Reply"])
 
-    # Add click action to open GUI
-    gui_action = settings.get("click_action", "gui")
-    if gui_action == "gui":
-        # Get the path to the lab command
-        lab_path = shutil.which("lab")
-        if lab_path:
-            cmd.extend(["-execute", f"{lab_path} gui"])
+    # Note: We don't add -execute here because this version of alerter (1.0.1)
+    # doesn't support that flag. Instead, we'll handle the click response below.
 
     # Execute alerter and capture response
     try:
@@ -211,6 +206,21 @@ def _send_macos_notification(message, level, source, request_response, settings)
                 f.write(json.dumps(response_entry) + "\n")
 
             console.print(f"\n[green]✅ User responded: {reply}[/green]")
+
+            # If user clicked the notification (not typed), open GUI with focus
+            gui_action = settings.get("click_action", "gui")
+            if reply == "@CONTENTCLICKED" and gui_action == "gui":
+                console.print(f"[cyan]Opening GUI with focus on {source}...[/cyan]")
+                # Use osascript to open Terminal with lab gui
+                try:
+                    subprocess.run([
+                        "osascript",
+                        "-e", "tell application \"Terminal\" to activate",
+                        "-e", f'tell application "Terminal" to do script "lab gui --focus {source}"'
+                    ], check=False)
+                except Exception as e:
+                    console.print(f"[yellow]Could not open GUI: {e}[/yellow]")
+
             return reply
 
     except subprocess.TimeoutExpired:
@@ -1254,11 +1264,12 @@ def image_inspect(image_tag):
 
 
 @cli.command()
-def gui():
+@click.option("--focus", "-f", default=None, help="Pre-select a specific lab by name")
+def gui(focus):
     """Launch interactive GUI mode (TUI)"""
     try:
         from claude_lab.gui import run_gui
-        run_gui()
+        run_gui(focus_lab=focus)
     except ImportError as e:
         console.print("[bold red]❌ GUI dependencies not available![/bold red]")
         console.print(f"Error: {e}")
