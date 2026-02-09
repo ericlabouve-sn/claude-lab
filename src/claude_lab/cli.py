@@ -154,6 +154,74 @@ def log_notification(message, level="info", source="system"):
         f.write(json.dumps(notification) + "\n")
 
 
+def _send_macos_notification(message, level, source, request_response, settings):
+    """Send macOS system notification using alerter"""
+    # Map levels to alerter sounds
+    sounds = {
+        "info": "Glass",
+        "success": "Hero",
+        "warning": "Basso",
+        "error": "Sosumi"
+    }
+
+    # Build alerter command
+    cmd = [
+        "alerter",
+        "-title", "Claude Lab",
+        "-subtitle", f"From: {source}",
+        "-message", message,
+        "-sound", sounds.get(level, "Glass"),
+        "-timeout", "30",  # Auto-dismiss after 30 seconds
+    ]
+
+    # Add reply button if response is requested
+    if request_response:
+        cmd.extend(["-reply", "-dropdownLabel", "Quick Reply"])
+
+    # Add click action to open GUI
+    gui_action = settings.get("click_action", "gui")
+    if gui_action == "gui":
+        # Get the path to the lab command
+        lab_path = shutil.which("lab")
+        if lab_path:
+            cmd.extend(["-execute", f"{lab_path} gui"])
+
+    # Execute alerter and capture response
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60  # Wait up to 60 seconds for user response
+        )
+
+        # Check if user provided a reply
+        if result.returncode == 0 and result.stdout.strip():
+            reply = result.stdout.strip()
+
+            # Log the reply
+            reply_log = Path.home() / ".claude-lab-responses.jsonl"
+            response_entry = {
+                "timestamp": datetime.now().isoformat(),
+                "source": source,
+                "original_message": message,
+                "reply": reply,
+            }
+            with open(reply_log, "a") as f:
+                f.write(json.dumps(response_entry) + "\n")
+
+            console.print(f"\n[green]✅ User responded: {reply}[/green]")
+            return reply
+
+    except subprocess.TimeoutExpired:
+        # User didn't respond in time
+        pass
+    except Exception as e:
+        console.print(f"[dim]Note: macOS notification failed: {e}[/dim]")
+
+    return None
+
+
 @click.group(invoke_without_command=True)
 @click.pass_context
 def cli(ctx):
@@ -197,6 +265,16 @@ def check_system():
     except subprocess.CalledProcessError:
         console.print("  ✗ docker daemon [red]NOT RUNNING[/red]")
         all_ok = False
+
+    # Check optional tools (macOS only)
+    if sys.platform == "darwin":
+        console.print("\n[bold blue]Optional Tools (macOS):[/bold blue]")
+        if check_command("alerter"):
+            console.print("  ✓ alerter    [green]OK[/green] - Interactive notifications")
+        else:
+            console.print("  ✗ alerter    [yellow]OPTIONAL[/yellow] - For macOS system notifications")
+            console.print("    [dim]Install: brew install --cask alerter[/dim]")
+            console.print("    [dim]Or download: https://github.com/vjeantet/alerter/releases[/dim]")
 
     return all_ok
 
@@ -605,6 +683,63 @@ def check():
 
 
 @cli.command()
+def reinstall():
+    """Reinstall claude-lab from source (for developers)"""
+    console.print("[bold blue]🔄 Reinstalling claude-lab...[/bold blue]\n")
+
+    # Check if we're in a claude-lab project directory
+    pyproject = Path.cwd() / "pyproject.toml"
+    if not pyproject.exists():
+        console.print("[red]Error: pyproject.toml not found in current directory[/red]")
+        console.print("[dim]Make sure you're in the claude-lab project root[/dim]")
+        sys.exit(1)
+
+    # Verify it's actually claude-lab
+    try:
+        with open(pyproject) as f:
+            content = f.read()
+            if "claude-lab" not in content and "claude_lab" not in content:
+                console.print("[yellow]Warning: This doesn't appear to be the claude-lab project[/yellow]")
+                console.print("[dim]Proceeding anyway...[/dim]\n")
+    except Exception:
+        pass
+
+    # Run uv tool install
+    console.print("[cyan]Running: uv tool install --force --editable .[/cyan]\n")
+
+    try:
+        result = subprocess.run(
+            ["uv", "tool", "install", "--force", "--editable", "."],
+            check=True,
+            capture_output=False
+        )
+
+        console.print("\n[bold green]✅ Reinstallation complete![/bold green]")
+        console.print("[dim]The 'lab' command has been updated with your latest changes.[/dim]")
+
+        # Show version info
+        try:
+            version_result = subprocess.run(
+                ["lab", "--version"],
+                capture_output=True,
+                text=True
+            )
+            if version_result.stdout:
+                console.print(f"\n[cyan]{version_result.stdout.strip()}[/cyan]")
+        except:
+            pass
+
+    except subprocess.CalledProcessError as e:
+        console.print(f"\n[red]❌ Reinstallation failed[/red]")
+        console.print(f"[dim]Error: {e}[/dim]")
+        sys.exit(1)
+    except FileNotFoundError:
+        console.print(f"\n[red]❌ 'uv' command not found[/red]")
+        console.print(f"[dim]Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh[/dim]")
+        sys.exit(1)
+
+
+@cli.command()
 @click.option("--global", "is_global", is_flag=True, help="Initialize global settings at ~/.lab/")
 def init(is_global):
     """Initialize .lab/ directory with default settings"""
@@ -652,9 +787,19 @@ base_port: 8080
 
 # Additional volume mounts to include in all labs
 # Format: "source:target:mode" where mode is "ro" (read-only) or "rw" (read-write)
+#
+# Default auto-mounts (always applied when they exist):
+#   - ~/.claude → /root/.claude (readonly)
+#   - ~/.gitconfig → /root/.gitconfig (readonly)
+#   - ~/.docker/config.json → /root/.docker/config.json (readonly)
+#   - SSH_AUTH_SOCK (for git operations)
+#   - kubeconfig (auto-generated for k3d cluster)
+#
+# Add your own custom mounts below:
 # Example:
 #   - "~/data:/data:ro"
 #   - "~/.aws/credentials:/root/.aws/credentials:ro"
+#   - "~/.kube/config:/root/.kube/config:ro"
 additional_mounts: []
 
 # Environment variables to set in all labs
@@ -662,6 +807,13 @@ additional_mounts: []
 #   NODE_ENV: "development"
 #   DEBUG: "true"
 environment: {}
+
+# macOS system notifications (requires alerter)
+# Install: brew install --cask alerter
+# Or download: https://github.com/vjeantet/alerter/releases
+macos_notifications:
+  enabled: true                    # Enable macOS system notification banners
+  click_action: "gui"              # Action when banner is clicked: "gui" to open lab GUI
 
 # Auto-cleanup settings (future feature)
 auto_cleanup:
@@ -691,12 +843,21 @@ auto_cleanup:
     console.print(f"  2. Run: lab setup <name>")
     console.print(f"  3. Settings will be automatically applied")
 
+    # Check for alerter on macOS
+    if sys.platform == "darwin":
+        if not shutil.which("alerter"):
+            console.print(f"\n[yellow]💡 Optional: Install alerter for macOS system notifications[/yellow]")
+            console.print(f"   [dim]brew install --cask alerter[/dim]")
+            console.print(f"   [dim]or download: https://github.com/vjeantet/alerter/releases[/dim]")
+            console.print(f"   [dim]Enables interactive notification banners with reply capability[/dim]")
+
 
 @cli.command()
 @click.option("--message", required=True, help="Notification message")
 @click.option("--level", default="info", type=click.Choice(["info", "success", "warning", "error"]))
 @click.option("--source", default="user", help="Source of the notification")
-def notify(message, level, source):
+@click.option("--request-response", "-r", is_flag=True, help="Request a response from the user (interactive)")
+def notify(message, level, source, request_response):
     """Send a notification to the main user session"""
     log_notification(message, level, source)
 
@@ -705,6 +866,86 @@ def notify(message, level, source):
     color = {"info": "blue", "success": "green", "warning": "yellow", "error": "red"}
 
     console.print(f"[{color[level]}]{emoji[level]} {message}[/{color[level]}]")
+
+    # Check if macOS notifications are enabled
+    merged_settings, _, _ = get_merged_settings()
+    macos_notif_settings = merged_settings.get("macos_notifications", {})
+
+    if not isinstance(macos_notif_settings, dict):
+        macos_notif_settings = {"enabled": True}  # Default to enabled
+
+    enabled = macos_notif_settings.get("enabled", True)
+
+    # Only send macOS notification if enabled and on macOS
+    if enabled and sys.platform == "darwin":
+        # Check if alerter is installed
+        alerter_path = shutil.which("alerter")
+
+        if not alerter_path:
+            # First time: provide installation instructions
+            install_file = Path.home() / ".claude-lab-alerter-install-shown"
+            if not install_file.exists():
+                console.print("\n[dim]💡 Tip: Install alerter for macOS system notifications:[/dim]")
+                console.print("[dim]   brew install --cask alerter[/dim]")
+                console.print("[dim]   or download from: https://github.com/vjeantet/alerter/releases[/dim]")
+                install_file.touch()
+        else:
+            # Send macOS notification using alerter
+            _send_macos_notification(message, level, source, request_response, macos_notif_settings)
+
+
+@cli.command()
+@click.option("--source", "-s", help="Filter responses by source")
+@click.option("--last", "-n", type=int, help="Show last N responses")
+@click.option("--clear", is_flag=True, help="Clear all responses after reading")
+def responses(source, last, clear):
+    """View user responses to notifications"""
+    response_file = Path.home() / ".claude-lab-responses.jsonl"
+
+    if not response_file.exists():
+        console.print("[yellow]No responses yet.[/yellow]")
+        return
+
+    with open(response_file) as f:
+        lines = f.readlines()
+
+    responses_list = [json.loads(line) for line in lines]
+
+    # Filter by source if specified
+    if source:
+        responses_list = [r for r in responses_list if r.get("source") == source]
+
+    if not responses_list:
+        console.print(f"[yellow]No responses{f' from {source}' if source else ''}.[/yellow]")
+        return
+
+    # Show last N if specified
+    if last:
+        responses_list = responses_list[-last:]
+
+    # Display responses
+    table = Table(title="User Responses", show_header=True, header_style="bold magenta")
+    table.add_column("Time", style="dim")
+    table.add_column("Source", style="cyan")
+    table.add_column("Original Message", style="yellow")
+    table.add_column("Reply", style="green")
+
+    for resp in responses_list:
+        timestamp = resp["timestamp"][:19].replace("T", " ")
+        table.add_row(
+            timestamp,
+            resp["source"],
+            resp["original_message"][:50] + "..." if len(resp["original_message"]) > 50 else resp["original_message"],
+            resp["reply"]
+        )
+
+    console.print(table)
+    console.print(f"\n[dim]Total responses: {len(responses_list)}[/dim]")
+
+    # Clear responses if requested
+    if clear:
+        response_file.unlink()
+        console.print("[green]✅ Responses cleared.[/green]")
 
 
 @cli.command()

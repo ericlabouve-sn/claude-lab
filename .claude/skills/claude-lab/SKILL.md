@@ -1,7 +1,7 @@
 ---
 name: claude-lab
-description: Manage isolated k3d/Kubernetes development environments with dedicated clusters, git worktrees, and tmux sessions for parallel development workflows. Supports GUI mode, global/project settings, and custom Docker images.
-argument-hint: setup <name> [--branch <branch>] [--image <image>] | list | teardown <name> | gui | cleanup [--dry-run] | init [--global]
+description: Use this skill when you need to start a new branch/task in an isolated environment with its own k3d cluster, git worktree, and tmux session. Supports GUI mode, global/project settings, and custom Docker images.
+argument-hint: setup <name> [--branch <branch>] [--image <image>] | list | teardown <name> | gui | init [--global]
 user-invocable: true
 ---
 
@@ -67,11 +67,11 @@ environment:
 ### Starting a New Lab Environment
 
 ```bash
-labsetup --name <environment-name>
+lab setup --name <environment-name>
 ```
 
 This will:
-1. Create a git worktree at `../<environment-name>` based on the current branch
+1. Create a git worktree at `${worktree_dir}/<environment-name>` based on the current branch
 2. Spin up a k3d cluster with unique ports (automatically assigned)
 3. Generate a kubeconfig patched for Docker host access
 4. Mount your SSH identity for git operations
@@ -80,7 +80,7 @@ This will:
 ### Listing Active Environments
 
 ```bash
-lablist
+lab list
 ```
 
 Shows a table of all active environments with their ports and status.
@@ -107,49 +107,123 @@ Launch an interactive terminal UI with:
 ### Tearing Down an Environment
 
 ```bash
-labteardown --name <environment-name>
+lab teardown --name <environment-name>
 ```
 
 Cleans up the k3d cluster, removes the git worktree, kills the tmux session, and updates the port registry.
 
-### Cleaning Up Orphaned Environments
-
-```bash
-# Show what would be cleaned up
-lab cleanup --dry-run
-
-# Clean up orphaned/stopped labs
-lab cleanup
-
-# Clean up labs older than N hours
-lab cleanup --older-than 24
-```
-
-Automatically cleans up labs where:
-- Tmux session has stopped
-- k3d cluster is missing
-- Worktree directory doesn't exist
-- Lab is older than specified time
-
 ### System Check
 
 ```bash
-labcheck
+lab check
 ```
 
 Verifies that all required tools (docker, k3d, tmux, git, kubectl, helm) are installed and Docker has sufficient resources.
 
 ## Notifications
 
-Lab instances can send notifications to the main user session using:
+### When to Use Notifications
+
+**Use notifications strategically** to get the user's attention when:
+
+1. **Need User Input**: A decision point requires user feedback
+   - Example: "Multiple configuration files found. Which should I use?"
+   - Use `--request-response` flag for interactive reply
+
+2. **Long-Running Tasks Complete**: Operations that take >30 seconds finish
+   - Example: "Build completed successfully (took 2m 34s)"
+   - User might be working elsewhere and wants to know
+
+3. **Errors Require Attention**: Critical failures that block progress
+   - Example: "Deployment failed: insufficient cluster resources"
+   - Use `--level error` with `--request-response` to ask how to proceed
+
+4. **Important Milestones**: Key progress checkpoints
+   - Example: "All 15 tests passed! Ready to deploy?"
+   - Use `--request-response` to get confirmation
+
+**Don't overuse**: Avoid notifications for routine operations or frequent updates. Reserve them for truly important moments.
+
+### Sending Notifications
 
 ```bash
-labnotify --message "Build completed successfully" --level info
+# Basic notification
+lab notify --message "Build completed successfully" --level success
+
+# Request user response (interactive on macOS)
+lab notify --message "Found 3 config files. Use production config?" --level warning --request-response
+
+# From specific source (helps user identify which lab)
+lab notify --message "Tests passed!" --level success --source "feature-auth"
 ```
 
-Notification levels: `info`, `success`, `warning`, `error`
+**Notification levels**: `info`, `success`, `warning`, `error`
 
-Notifications are written to `~/.claude-lab-notifications.jsonl` and can be polled or displayed via a TUI.
+### Interactive macOS Notifications
+
+On macOS (with `alerter` installed), notifications appear as system banners with:
+- **Reply button**: User can type a quick response (with `--request-response`)
+- **Click action**: Opens Claude Lab GUI to see all labs and interact
+- **Auto-dismiss**: Closes after 30 seconds if ignored
+
+### Checking for User Responses
+
+After sending an interactive notification, check for responses:
+
+```bash
+# View all user responses
+lab responses
+
+# View responses from specific lab
+lab responses --source "feature-auth"
+
+# View last response only
+lab responses --last 1
+
+# Clear responses after reading
+lab responses --clear
+```
+
+### Example Workflow
+
+```bash
+# Claude instance needs user decision
+lab notify --message "Deploy to staging or wait for QA review?" \
+  --level info \
+  --request-response \
+  --source "feature-auth"
+
+# Wait a moment for response
+sleep 5
+
+# Check if user responded
+response=$(lab responses --source "feature-auth" --last 1)
+if [[ $response == *"staging"* ]]; then
+  # User said to deploy to staging
+  kubectl apply -f staging/
+elif [[ $response == *"wait"* ]]; then
+  # User said to wait
+  lab notify --message "Waiting for QA review" --level info --source "feature-auth"
+fi
+```
+
+### Installation (macOS)
+
+For interactive notifications, install `alerter`:
+
+```bash
+brew install --cask alerter
+# or download from: https://github.com/vjeantet/alerter/releases
+```
+
+Configure in settings:
+
+```yaml
+# .lab/settings.yaml or ~/.lab/settings.yaml
+macos_notifications:
+  enabled: true           # Enable system notifications
+  click_action: "gui"     # Open lab GUI when banner is clicked
+```
 
 ## Image Management
 
@@ -304,10 +378,6 @@ lab list
 
 # When done, clean up
 lab teardown feature-auth
-
-# Clean up orphaned labs
-lab cleanup --dry-run
-lab cleanup
 
 # Send a notification from within a lab
 lab notify --message "Tests passed!" --level success
