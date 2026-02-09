@@ -15,9 +15,9 @@ Claude Lab Manager allows you to:
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Main Development Host                    │
-│                                                              │
+┌───────────────────────────────────────────────────────────┐
+│                     Main Development Host                 │
+│                                                           │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
 │  │ Lab: feature-│  │ Lab: bugfix- │  │ Lab: refactor│     │
 │  │ auth         │  │ login        │  │ -api         │     │
@@ -27,10 +27,10 @@ Claude Lab Manager allows you to:
 │  │ Claude Box   │  │ Claude Box   │  │ Claude Box   │     │
 │  │ Tmux Session │  │ Tmux Session │  │ Tmux Session │     │
 │  └──────────────┘  └──────────────┘  └──────────────┘     │
-│                                                              │
-│  Port Registry: ~/.claude-lab-port-registry.json                  │
-│  Notifications: ~/.claude-lab-notifications.jsonl             │
-└─────────────────────────────────────────────────────────────┘
+│                                                           │
+│  Port Registry: ~/.claude-lab-port-registry.json          │
+│  Notifications: ~/.claude-lab-notifications.jsonl         │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ## Prerequisites
@@ -94,17 +94,17 @@ For detailed installation and architecture info:
 ### Check System Requirements
 
 ```bash
-labcheck
+lab check
 ```
 
 ### Install Missing Tools
 
 ```bash
 # Dry-run to see what would be installed
-labinstall --dry-run
+lab install --dry-run
 
 # Actually install
-labinstall
+lab install
 ```
 
 ## Usage
@@ -115,17 +115,17 @@ labinstall
 
 ```bash
 # Build the base image with pre-installed tools
-labimage-build --template base
+lab image-build --template base
 ```
 
 2. **Create a new lab environment:**
 
 ```bash
 # Using default image
-labsetup --name feature-auth
+lab setup --name feature-auth
 
 # Or with custom image
-labsetup --name feature-auth --image claude-lab:base
+lab setup --name feature-auth --image claude-lab:base
 ```
 
 This creates:
@@ -143,13 +143,13 @@ tmux attach -t feature-auth
 3. **List active labs:**
 
 ```bash
-lablist
+lab list
 ```
 
 4. **Tear down when done:**
 
 ```bash
-labteardown --name feature-auth
+lab teardown --name feature-auth
 ```
 
 #### Clean Up Orphaned Labs
@@ -173,7 +173,7 @@ lab cleanup --all
 #### Create Lab on Specific Branch
 
 ```bash
-labsetup --name bugfix-123 --branch develop
+lab setup --name bugfix-123 --branch develop
 ```
 
 #### Force Teardown
@@ -181,7 +181,7 @@ labsetup --name bugfix-123 --branch develop
 If resources are busy, force removal:
 
 ```bash
-labteardown --name feature-auth --force
+lab teardown --name feature-auth --force
 ```
 
 #### Send Notifications
@@ -189,26 +189,26 @@ labteardown --name feature-auth --force
 From within a lab instance:
 
 ```bash
-labnotify --message "Build completed" --level success
+lab notify --message "Build completed" --level success
 ```
 
 #### View Notification History
 
 ```bash
 # Show all notifications
-labnotifications
+lab notifications
 
 # Show last 10
-labnotifications --last 10
+lab notifications --last 10
 
 # Follow new notifications (like tail -f)
-labnotifications --follow
+lab notifications --follow
 ```
 
 #### Interactive Status View
 
 ```bash
-labstatus
+lab status
 ```
 
 Or directly run the script:
@@ -225,26 +225,26 @@ Pre-build images with tools like kubectl, helm, k9s for faster lab startup:
 
 ```bash
 # List available templates
-labimage-list
+la bimage-list
 
 # Build from template
-labimage-build --template base
-labimage-build --template k8s-full
-labimage-build --template python-dev
+lab image-build --template base
+lab image-build --template k8s-full
+lab image-build --template python-dev
 ```
 
 #### Use Custom Images
 
 ```bash
 # Create lab with specific image
-labsetup --name my-lab --image claude-lab:k8s-full
+lab setup --name my-lab --image claude-lab:k8s-full
 ```
 
 #### Manage Images
 
 ```bash
 # Update (rebuild) an image
-labimage-update --template base
+lab image-update --template base
 
 # Inspect an image
 labimage-inspect --image-tag base
