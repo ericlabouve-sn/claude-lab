@@ -90,60 +90,46 @@ class LabDetailsPanel(Static):
 [bold]Created:[/bold] {self.selected_info.get('created', 'N/A')[:19]}
 
 [bold cyan]Available Actions:[/bold cyan]
-• [green]a[/green] - Attach to tmux session
+• [green]Enter[/green] - Attach to tmux session
 • [yellow]r[/yellow] - Refresh all
 • [blue]n[/blue] - Create new lab
 • [red]d[/red] - Teardown lab
 """
 
 
-class NotificationsPanel(Static):
-    """Display notifications"""
+class ClaudeLogsPanel(Static):
+    """Display recent Claude Code logs from the selected lab"""
 
     selected_lab = reactive(None)
 
     def render(self) -> str:
-        """Render the notifications panel"""
-        notifications = get_notifications(limit=50)
+        """Render the Claude logs panel"""
+        if not self.selected_lab:
+            return "[bold cyan]Claude Code Logs[/bold cyan]\n\n[dim]Select a lab to view logs[/dim]"
 
-        # Filter by lab if specified
-        if self.selected_lab:
-            notifications = [
-                n for n in notifications
-                if n.get("source") == self.selected_lab or self.selected_lab in n.get("message", "")
-            ]
+        # Check if tmux session is running
+        if not check_tmux_session(self.selected_lab):
+            return f"[bold cyan]Claude Code Logs[/bold cyan]\n\n[dim]Lab '{self.selected_lab}' is not running[/dim]"
 
-        if not notifications:
-            return "[bold cyan]Notifications[/bold cyan]\n\n[dim]No notifications[/dim]"
-
-        lines = ["[bold cyan]Notifications[/bold cyan]\n"]
-        for notif in reversed(notifications[-15:]):  # Show last 15
-            timestamp = notif["timestamp"][11:19]  # Just time
-            level = notif["level"]
-            source = notif.get("source", "system")
-            message = notif["message"]
-
-            emoji = {
-                "info": "ℹ️",
-                "success": "✅",
-                "warning": "⚠️",
-                "error": "❌"
-            }
-            color = {
-                "info": "blue",
-                "success": "green",
-                "warning": "yellow",
-                "error": "red"
-            }
-
-            line = (
-                f"[dim]{timestamp}[/dim] "
-                f"[{color.get(level, 'white')}]{emoji.get(level, '•')}[/] "
-                f"[cyan]{source}[/cyan]: {message}"
+        # Capture recent tmux pane output
+        try:
+            result = subprocess.run(
+                ["tmux", "capture-pane", "-p", "-t", self.selected_lab, "-S", "-100"],
+                capture_output=True,
+                text=True,
+                timeout=2
             )
-            lines.append(line)
 
-        return "\n".join(lines)
+            if result.returncode == 0 and result.stdout:
+                lines = result.stdout.strip().split("\n")
+                # Take last 30 lines to fit in panel
+                recent_lines = lines[-30:]
+                log_content = "\n".join(recent_lines)
+                return f"[bold cyan]Claude Code Logs[/bold cyan] [dim](last 30 lines)[/dim]\n\n{log_content}"
+            else:
+                return f"[bold cyan]Claude Code Logs[/bold cyan]\n\n[dim]No output available[/dim]"
+        except Exception as e:
+            return f"[bold cyan]Claude Code Logs[/bold cyan]\n\n[yellow]Error capturing logs: {e}[/yellow]"
 
 
 class ClaudeLabGUI(App):
@@ -171,11 +157,15 @@ class ClaudeLabGUI(App):
         padding: 1;
     }
 
-    #notifications {
+    #claude-logs {
         height: 1fr;
         border: solid yellow;
         padding: 1;
         overflow-y: auto;
+    }
+
+    ListItem Label {
+        width: 100%;
     }
 
     ListView {
@@ -203,8 +193,6 @@ class ClaudeLabGUI(App):
         Binding("r", "refresh", "Refresh"),
         Binding("n", "new_lab", "New Lab"),
         Binding("d", "delete_lab", "Delete"),
-        Binding("a", "attach", "Attach"),
-        Binding("enter", "attach", "Attach", show=False),  # Enter also attaches
     ]
 
     def __init__(self, focus_lab=None):
@@ -225,7 +213,7 @@ class ClaudeLabGUI(App):
             # Right main panel
             with Vertical(id="main-panel"):
                 yield LabDetailsPanel(id="lab-details")
-                yield NotificationsPanel(id="notifications")
+                yield ClaudeLogsPanel(id="claude-logs")
 
         yield Footer()
 
@@ -263,17 +251,32 @@ class ClaudeLabGUI(App):
         # Auto-select focused lab or first item
         if len(lab_list.children) > 0:
             lab_list.index = focus_index
+
+            # Trigger initial display of details
+            lab_names = list(self.labs_registry.keys())
+            if 0 <= focus_index < len(lab_names):
+                selected_name = lab_names[focus_index]
+                selected_info = self.labs_registry[selected_name]
+
+                # Update panels
+                details = self.query_one("#lab-details", LabDetailsPanel)
+                details.selected_lab = selected_name
+                details.selected_info = selected_info
+
+                logs = self.query_one("#claude-logs", ClaudeLogsPanel)
+                logs.selected_lab = selected_name
+
             # Clear focus_lab after first use
             self.focus_lab = None
 
-    def on_list_view_selected(self, event: ListView.Selected):
-        """Handle lab selection"""
+    def on_list_view_highlighted(self, event: ListView.Highlighted):
+        """Handle lab navigation (arrow keys) - show details proactively"""
         if not self.labs_registry:
             return
 
-        # Get the selected lab name from the index
+        # Get the highlighted lab name from the index
         lab_names = list(self.labs_registry.keys())
-        if 0 <= event.list_view.index < len(lab_names):
+        if event.list_view.index is not None and 0 <= event.list_view.index < len(lab_names):
             selected_name = lab_names[event.list_view.index]
             selected_info = self.labs_registry[selected_name]
 
@@ -282,9 +285,14 @@ class ClaudeLabGUI(App):
             details.selected_lab = selected_name
             details.selected_info = selected_info
 
-            # Update notifications panel
-            notifications = self.query_one("#notifications", NotificationsPanel)
-            notifications.selected_lab = selected_name
+            # Update logs panel
+            logs = self.query_one("#claude-logs", ClaudeLogsPanel)
+            logs.selected_lab = selected_name
+
+    def on_list_view_selected(self, event: ListView.Selected):
+        """Handle lab selection (Enter key) - attach to lab"""
+        # Enter key now triggers attach action directly
+        self.action_attach()
 
     def get_selected_lab(self) -> Optional[tuple]:
         """Get the currently selected lab name"""
@@ -309,14 +317,14 @@ class ClaudeLabGUI(App):
 
         # Trigger re-render of panels
         details = self.query_one("#lab-details", LabDetailsPanel)
-        notifications = self.query_one("#notifications", NotificationsPanel)
+        logs = self.query_one("#claude-logs", ClaudeLogsPanel)
 
         selected = self.get_selected_lab()
         if selected:
             name, info = selected
             details.selected_lab = name
             details.selected_info = info
-            notifications.selected_lab = name
+            logs.selected_lab = name
 
     def action_attach(self):
         """Attach to the selected lab's tmux session in a new Terminal window"""
