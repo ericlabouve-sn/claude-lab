@@ -1,0 +1,45 @@
+{
+  "templates": {
+    "minimal": {
+      "name": "minimal",
+      "dockerfile": "minimal.Dockerfile",
+      "description": "Minimal image with kubectl and helm only",
+      "size_estimate": "~300MB",
+      "tools": ["kubectl", "helm"],
+      "use_case": "Lightweight environments for basic k8s operations"
+    },
+    "base": {
+      "name": "base",
+      "dockerfile": "base.Dockerfile",
+      "description": "Base image with essential development tools",
+      "size_estimate": "~800MB",
+      "tools": ["kubectl", "helm", "k9s", "docker", "git", "vim", "jq", "yq"],
+      "use_case": "Standard k8s development with common tools"
+    },
+    "k8s-full": {
+      "name": "k8s-full",
+      "dockerfile": "k8s-full.Dockerfile",
+      "description": "Full-featured k8s environment with all tools",
+      "size_estimate": "~2GB",
+      "tools": [
+        "kubectl", "helm", "k9s", "kubectx", "kubens",
+        "kustomize", "stern", "flux", "argocd", "istioctl",
+        "terraform", "docker", "python3"
+      ],
+      "use_case": "Comprehensive k8s development with GitOps and service mesh tools"
+    },
+    "python-dev": {
+      "name": "python-dev",
+      "dockerfile": "python-dev.Dockerfile",
+      "description": "Python development environment with k8s tools",
+      "size_estimate": "~1.5GB",
+      "tools": [
+        "kubectl", "helm", "k9s", "python3.11", "uv",
+        "pip", "pytest", "black", "ruff", "jupyter"
+      ],
+      "use_case": "Python application development targeting Kubernetes"
+    }
+  },
+  "default_template": "base",
+  "image_prefix": "claude-lab"
+}

@@ -1,0 +1,71 @@
+[project]
+name = "claude-lab"
+version = "0.1.0"
+description = "Orchestrate isolated development environments with k3d clusters and git worktrees"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "Claude Lab Contributors"}
+]
+keywords = ["kubernetes", "k3s", "k3d", "docker", "git", "worktree", "tmux", "development", "claude"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Build Tools",
+]
+dependencies = [
+    "invoke>=2.2.0",
+    "rich>=13.7.0",
+    "click>=8.1.7",
+    "textual>=0.47.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+lab = "claude_lab.cli:cli"
+
+[project.urls]
+Homepage = "https://github.com/yourusername/claude-lab"
+Documentation = "https://github.com/yourusername/claude-lab#readme"
+Repository = "https://github.com/yourusername/claude-lab"
+Issues = "https://github.com/yourusername/claude-lab/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "black>=23.7.0",
+    "ruff>=0.1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/claude_lab"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src" = ""
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.4.0",
+    "black>=23.7.0",
+    "ruff>=0.1.0",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+ignore = []

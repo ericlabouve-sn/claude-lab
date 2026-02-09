@@ -1,0 +1,49 @@
+# Claude Lab Project Configuration
+# This file defines project-specific settings for lab environments
+
+# Directory where worktrees will be created (relative to project root or absolute path)
+# Default: "/tmp/claude-labs" (temporary directory for isolated work)
+# You can also use:
+#   - ".." for parent directory
+#   - "~/labs" for home directory labs folder
+#   - Any absolute or relative path
+worktree_dir: "/tmp/claude-labs"
+
+# Docker image to use for sandbox environments
+# Options:
+#   - "claude" (default Claude Code sandbox)
+#   - "claude-lab:base" (minimal K8s tools)
+#   - "claude-lab:k8s-full" (comprehensive K8s environment)
+#   - "claude-lab:custom-name" (your custom image)
+#   - "my-org/my-image:tag" (any Docker image)
+# Default: "claude"
+docker_image: "claude"
+
+# Starting port number for lab HTTP services
+# Each lab gets: HTTP port and API port (HTTP + 1000)
+# Default: 8080
+base_port: 8080
+
+# Additional mounts to include in all labs
+# Format: source:target:mode (mode is optional, defaults to "rw")
+# additional_mounts:
+#   - "~/.aws/credentials:/root/.aws/credentials:ro"
+#   - "~/scripts:/scripts:ro"
+additional_mounts: []
+
+# Environment variables to set in all labs
+# environment:
+#   NODE_ENV: "development"
+#   DEBUG: "true"
+environment: {}
+
+# Auto-cleanup settings
+# auto_cleanup:
+#   # Delete labs older than N days
+#   max_age_days: 30
+#   # Delete stopped labs after N days
+#   stopped_age_days: 7
+auto_cleanup:
+  enabled: false
+  max_age_days: 30
+  stopped_age_days: 7
