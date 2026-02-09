@@ -195,6 +195,51 @@ labimage-delete --image-tag base
 - **k8s-full** (~2GB): All k8s tools (kubectl, helm, k9s, kubectx, kustomize, stern, flux, argocd, istio, terraform)
 - **python-dev** (~1.5GB): Python 3.11 + k8s tools (uv, pytest, black, ruff, jupyter)
 
+### Custom Templates
+
+Create project-specific or user-global Docker templates:
+
+**Template Priority:**
+1. `.lab/templates/` - Project-specific (versioned in git)
+2. `~/.lab/templates/` - User-global custom templates
+3. Built-in templates - Package defaults
+
+**Create a custom template:**
+
+```bash
+# Create project template directory
+mkdir -p .lab/templates
+
+# Copy and modify a built-in template
+cp src/claude_lab/templates/base.Dockerfile .lab/templates/my-custom.Dockerfile
+
+# Create templates.json
+cat > .lab/templates/templates.json <<EOF
+{
+  "image_prefix": "claude-lab",
+  "default_template": "my-custom",
+  "templates": {
+    "my-custom": {
+      "dockerfile": "my-custom.Dockerfile",
+      "description": "Custom template with project tools",
+      "size_estimate": "~500MB",
+      "tools": ["kubectl", "helm", "your-tool"]
+    }
+  }
+}
+EOF
+
+# Build and use it
+lab image-build my-custom
+lab setup --name test --image claude-lab:my-custom
+```
+
+**Benefits:**
+- Version control project templates in git
+- Share team-specific tooling
+- Override built-ins without modifying package
+- User-global templates across all projects
+
 ### Create Project-Specific Images
 
 Analyze a project directory and create a custom image:

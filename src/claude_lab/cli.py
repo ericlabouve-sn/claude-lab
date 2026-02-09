@@ -99,6 +99,29 @@ def get_project_setting(key, default=None):
     return default
 
 
+def find_templates_dir():
+    """
+    Find templates directory with priority hierarchy:
+    1. Project-specific: .lab/templates/
+    2. User-global: ~/.lab/templates/
+    3. Built-in: installed package templates/
+
+    Returns Path to templates directory containing templates.json
+    """
+    # 1. Check project .lab/templates
+    project_templates = Path.cwd() / ".lab" / "templates"
+    if project_templates.exists() and (project_templates / "templates.json").exists():
+        return project_templates
+
+    # 2. Check global ~/.lab/templates
+    global_templates = Path.home() / ".lab" / "templates"
+    if global_templates.exists() and (global_templates / "templates.json").exists():
+        return global_templates
+
+    # 3. Fall back to built-in (installed package)
+    return Path(__file__).parent / "templates"
+
+
 def get_registry():
     """Load the port registry from disk"""
     if not REGISTRY_PATH.exists():
@@ -730,8 +753,7 @@ def notifications(follow, last):
 @click.option("--no-cache", is_flag=True, help="Build without cache")
 def image_build(template, tag, no_cache):
     """Build a Docker image from a template"""
-    skill_dir = Path(__file__).parent
-    templates_dir = skill_dir / "templates"
+    templates_dir = find_templates_dir()
     templates_file = templates_dir / "templates.json"
 
     # Load template metadata
@@ -807,8 +829,7 @@ def image_build(template, tag, no_cache):
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed information")
 def image_list(verbose):
     """List available templates and built images"""
-    skill_dir = Path(__file__).parent
-    templates_dir = skill_dir / "templates"
+    templates_dir = find_templates_dir()
     templates_file = templates_dir / "templates.json"
 
     if not templates_file.exists():
@@ -894,8 +915,8 @@ def image_list(verbose):
 @click.option("--force", "-f", is_flag=True, help="Force removal")
 def image_delete(image_tag, force):
     """Delete a built Docker image"""
-    skill_dir = Path(__file__).parent
-    templates_file = skill_dir / "templates" / "templates.json"
+    templates_dir = find_templates_dir()
+    templates_file = templates_dir / "templates.json"
 
     with open(templates_file) as f:
         templates_data = json.load(f)
@@ -933,8 +954,8 @@ def image_update(template):
 @click.argument("image_tag")
 def image_inspect(image_tag):
     """Show detailed information about an image"""
-    skill_dir = Path(__file__).parent
-    templates_file = skill_dir / "templates" / "templates.json"
+    templates_dir = find_templates_dir()
+    templates_file = templates_dir / "templates.json"
 
     with open(templates_file) as f:
         templates_data = json.load(f)
