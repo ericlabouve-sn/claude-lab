@@ -199,6 +199,7 @@ class ClaudeLabGUI(App):
         super().__init__()
         self.labs_registry = {}
         self.focus_lab = focus_lab  # Lab to focus on when GUI opens
+        self.pending_delete = None  # Track lab pending deletion for confirmation
 
     def compose(self) -> ComposeResult:
         """Create child widgets"""
@@ -273,6 +274,9 @@ class ClaudeLabGUI(App):
         """Handle lab navigation (arrow keys) - show details proactively"""
         if not self.labs_registry:
             return
+
+        # Clear pending delete when navigating to different lab
+        self.pending_delete = None
 
         # Get the highlighted lab name from the index
         lab_names = list(self.labs_registry.keys())
@@ -359,16 +363,49 @@ class ClaudeLabGUI(App):
         self.notify("Lab creation via GUI coming soon! Use 'lab setup <name>' for now.")
 
     def action_delete_lab(self):
-        """Delete the selected lab"""
+        """Delete the selected lab with confirmation"""
         selected = self.get_selected_lab()
         if not selected:
             return
 
         name, _ = selected
 
-        # For now, just show a message
-        # TODO: Implement confirmation dialog
-        self.notify(f"Lab deletion via GUI coming soon! Use 'lab teardown {name}' for now.")
+        # Two-step confirmation to prevent accidental deletion
+        if self.pending_delete != name:
+            # First press - ask for confirmation
+            self.pending_delete = name
+            self.notify(
+                f"⚠️  Press 'd' again to confirm deletion of '{name}'",
+                severity="warning",
+                timeout=5
+            )
+            # Clear pending delete after 5 seconds
+            self.set_timer(5, lambda: setattr(self, 'pending_delete', None))
+        else:
+            # Second press - actually delete
+            self.notify(f"🗑️  Tearing down lab '{name}'...", severity="information")
+            self.pending_delete = None
+
+            try:
+                # Run lab teardown command
+                result = subprocess.run(
+                    ["lab", "teardown", name],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+
+                if result.returncode == 0:
+                    self.notify(f"✅ Lab '{name}' successfully deleted!", severity="information")
+                    # Refresh the lab list
+                    self.refresh_labs()
+                else:
+                    error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                    self.notify(f"❌ Failed to delete lab: {error_msg}", severity="error")
+            except subprocess.TimeoutExpired:
+                self.notify(f"❌ Deletion timed out after 30 seconds", severity="error")
+            except Exception as e:
+                self.notify(f"❌ Error deleting lab: {e}", severity="error")
 
 
 def run_gui(focus_lab=None):

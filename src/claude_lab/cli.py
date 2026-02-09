@@ -620,11 +620,38 @@ def teardown(name, force):
 
         # 2. Remove git worktree
         task2 = progress.add_task("Removing git worktree...", total=None)
-        force_flag = ["--force"] if force else []
-        subprocess.run(
-            ["git", "worktree", "remove", reg[name]["dir"]] + force_flag,
+        worktree_dir = Path(reg[name]["dir"])
+
+        # First try without force
+        result = subprocess.run(
+            ["git", "worktree", "remove", str(worktree_dir)],
             capture_output=True,
+            text=True,
         )
+
+        # If failed and not using force, try with force flag
+        if result.returncode != 0:
+            if not force:
+                console.print(f"[yellow]Note: Worktree removal failed, retrying with --force...[/yellow]")
+                result = subprocess.run(
+                    ["git", "worktree", "remove", "--force", str(worktree_dir)],
+                    capture_output=True,
+                    text=True,
+                )
+
+            # If still failed, report error
+            if result.returncode != 0:
+                console.print(f"[yellow]Warning: Could not remove worktree: {result.stderr}[/yellow]")
+
+        # Verify directory is actually removed
+        if worktree_dir.exists():
+            console.print(f"[yellow]Warning: Worktree directory still exists, attempting manual cleanup...[/yellow]")
+            try:
+                import shutil
+                shutil.rmtree(worktree_dir)
+            except Exception as e:
+                console.print(f"[yellow]Warning: Could not remove directory: {e}[/yellow]")
+
         progress.update(task2, completed=True)
 
         # 3. Kill tmux session
