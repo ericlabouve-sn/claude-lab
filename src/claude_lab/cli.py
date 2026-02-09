@@ -378,6 +378,39 @@ def setup(name, branch, image):
         console.print("\n[bold red]❌ System check failed. Please install missing tools.[/bold red]")
         sys.exit(1)
 
+    # Check DNS and proxy setup (for seamless domain access)
+    if PROXY_AVAILABLE:
+        dns_mgr = DNSManager()
+        proxy_mgr = ProxyManager()
+
+        # Check DNS configuration
+        dns_configured = dns_mgr.is_configured() and dns_mgr.is_resolver_configured()
+        proxy_running = proxy_mgr.is_running()
+
+        if not dns_configured:
+            console.print("\n[yellow]⚠️  DNS not configured for *.local domains[/yellow]")
+            console.print("[dim]Without DNS, you'll need port numbers: http://localhost:8081[/dim]")
+            console.print("[dim]With DNS: http://lab-name.local/ (seamless!)[/dim]")
+            console.print("\n[cyan]To configure DNS:[/cyan] lab dns setup")
+
+            if not click.confirm("\nContinue without DNS setup?", default=True):
+                console.print("[yellow]Cancelled. Run 'lab dns setup' first.[/yellow]")
+                sys.exit(0)
+            console.print()
+
+        # Check if proxy is running
+        if not proxy_running and dns_configured:
+            console.print("[yellow]⚠️  Reverse proxy not running[/yellow]")
+            console.print("[dim]DNS is configured, but you need the proxy for domain access.[/dim]")
+
+            if click.confirm("\nStart reverse proxy now?", default=True):
+                console.print()
+                proxy_mgr.start()
+                console.print()
+            else:
+                console.print("[dim]Skipping proxy. Start later: lab proxy start[/dim]")
+                console.print()
+
     # Load project settings
     worktree_dir = get_project_setting("worktree_dir", "..")
     default_image = get_project_setting("docker_image", "claude")
@@ -599,15 +632,26 @@ def setup(name, branch, image):
     # Auto-register with proxy if running
     if PROXY_AVAILABLE:
         proxy = ProxyManager()
+        dns_mgr = DNSManager()
+        dns_ready = dns_mgr.is_configured() and dns_mgr.is_resolver_configured()
+
         if proxy.is_running():
             console.print(f"\n[dim]Registering routes with proxy...[/dim]")
             proxy.register_lab(name, port)
-            console.print(f"\n[bold green]🌐 Access via: http://{name}.local/[/bold green]")
-            console.print(f"[dim]Or subdomains: http://subdomain.{name}.local/[/dim]")
+
+            if dns_ready:
+                console.print(f"\n[bold green]🌐 Access via: http://{name}.local/[/bold green]")
+                console.print(f"[dim]Subdomains also work: http://subdomain.{name}.local/[/dim]")
+            else:
+                console.print(f"\n[yellow]⚠️  Proxy running but DNS not configured[/yellow]")
+                console.print(f"[dim]Access via: http://localhost:{port}/[/dim]")
+                console.print(f"[dim]For domain access, run: lab dns setup[/dim]")
         else:
-            console.print(f"\n[dim]💡 Tip: Start proxy for seamless domain access:[/dim]")
-            console.print(f"[dim]   lab proxy start[/dim]")
-            console.print(f"[dim]   Then access via: http://{name}.local/[/dim]")
+            if dns_ready:
+                console.print(f"\n[yellow]💡 DNS ready but proxy not running:[/yellow]")
+                console.print(f"[dim]   lab proxy start[/dim]")
+                console.print(f"[dim]   Then: http://{name}.local/[/dim]")
+            console.print(f"\n[dim]Access via: http://localhost:{port}/[/dim]")
 
 
 @cli.command()
