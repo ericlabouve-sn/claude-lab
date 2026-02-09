@@ -213,7 +213,7 @@ For interactive notifications, install `alerter`:
 
 ```bash
 # Download from GitHub
-curl -L https://github.com/vjeantet/alerter/releases/download/003/alerter.zip -o /tmp/alerter.zip
+curl -L https://github.com/vjeantet/alerter/releases/download/1.0.1/alerter_v1.0.1_darwin_amd64.zip -o /tmp/alerter.zip
 unzip -o /tmp/alerter.zip -d /tmp
 sudo mv /tmp/alerter /usr/local/bin/alerter
 sudo chmod +x /usr/local/bin/alerter
@@ -242,33 +242,33 @@ Build and manage custom Docker images with pre-installed tools:
 
 ```bash
 # Available templates: minimal, base, k8s-full, python-dev
-labimage-build --template base
-labimage-build --template k8s-full --tag v1.0
+lab image-build --template base
+lab image-build --template k8s-full --tag v1.0
 ```
 
 ### List Available Images
 
 ```bash
-labimage-list
-labimage-list --verbose
+lab image-list
+lab image-list --verbose
 ```
 
 ### Use Custom Image in Lab
 
 ```bash
-labsetup --name my-lab --image claude-lab:k8s-full
+lab setup --name my-lab --image claude-lab:k8s-full
 ```
 
 ### Update (Rebuild) an Image
 
 ```bash
-labimage-update --template base
+lab image-update --template base
 ```
 
 ### Delete an Image
 
 ```bash
-labimage-delete --image-tag base
+lab image-delete --image-tag base
 ```
 
 ### Image Templates
