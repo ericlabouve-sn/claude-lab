@@ -371,7 +371,9 @@ def install(dry_run):
 @click.argument("name")
 @click.option("--branch", default=None, help="Branch to checkout (default: current)")
 @click.option("--image", default=None, help="Custom Docker image to use (default: uses Claude sandbox default)")
-def setup(name, branch, image):
+@click.option("--yes", "-y", is_flag=True, help="Auto-confirm all prompts (for automation)")
+@click.option("--no-interactive", is_flag=True, help="Skip all DNS/proxy setup prompts")
+def setup(name, branch, image, yes, no_interactive):
     """Set up a new isolated lab environment"""
 
     if not check_system():
@@ -379,7 +381,8 @@ def setup(name, branch, image):
         sys.exit(1)
 
     # Check DNS and proxy setup (for seamless domain access)
-    if PROXY_AVAILABLE:
+    # Skip interactive prompts if --no-interactive or --yes with automation
+    if PROXY_AVAILABLE and not no_interactive:
         dns_mgr = DNSManager()
         proxy_mgr = ProxyManager()
 
@@ -392,20 +395,20 @@ def setup(name, branch, image):
             console.print("[dim]Without DNS, you'll need port numbers: http://localhost:8081[/dim]")
             console.print("[dim]With DNS: http://lab-name.local/ (seamless!)[/dim]")
 
-            # Offer to run DNS setup now
-            if click.confirm("\nRun DNS setup now? (requires sudo)", default=False):
+            # Offer to run DNS setup now (unless --yes for automation)
+            if yes or click.confirm("\nRun DNS setup now? (requires sudo)", default=False):
                 console.print()
                 if dns_mgr.setup():
                     console.print("\n[green]✅ DNS configured successfully![/green]")
                     dns_configured = True
                 else:
                     console.print("\n[yellow]⚠️  DNS setup incomplete[/yellow]")
-                    if not click.confirm("\nContinue anyway?", default=True):
+                    if not (yes or click.confirm("\nContinue anyway?", default=True)):
                         console.print("[yellow]Cancelled. Retry DNS setup with: lab dns setup[/yellow]")
                         sys.exit(0)
             else:
                 console.print("\n[dim]Skipping DNS setup. Run manually: lab dns setup[/dim]")
-                if not click.confirm("\nContinue without DNS?", default=True):
+                if not (yes or click.confirm("\nContinue without DNS?", default=True)):
                     console.print("[yellow]Cancelled. Run 'lab dns setup' first.[/yellow]")
                     sys.exit(0)
             console.print()
@@ -416,7 +419,7 @@ def setup(name, branch, image):
                 console.print("[yellow]⚠️  Reverse proxy not running[/yellow]")
                 console.print("[dim]DNS is configured, but you need the proxy for domain access.[/dim]")
 
-                if click.confirm("\nStart reverse proxy now?", default=True):
+                if yes or click.confirm("\nStart reverse proxy now?", default=True):
                     console.print()
                     proxy_mgr.start()
                     console.print()
@@ -427,6 +430,15 @@ def setup(name, branch, image):
                 # DNS not configured, but mention proxy anyway
                 console.print("[dim]💡 For seamless access, you'll also need the reverse proxy[/dim]")
                 console.print("[dim]   After DNS is configured, run: lab proxy start[/dim]")
+    elif PROXY_AVAILABLE and no_interactive:
+        # Silent mode for automation - just log status
+        dns_mgr = DNSManager()
+        proxy_mgr = ProxyManager()
+        dns_configured = dns_mgr.is_configured() and dns_mgr.is_resolver_configured()
+        proxy_running = proxy_mgr.is_running()
+
+        if not dns_configured or not proxy_running:
+            console.print("[dim]Note: DNS/proxy not configured. Lab accessible at http://localhost:{port}[/dim]")
 
     # Load project settings
     worktree_dir = get_project_setting("worktree_dir", "..")
@@ -798,13 +810,43 @@ def list():
 
 
 @cli.command()
-def check():
+@click.option("--verbose", "-v", is_flag=True, help="Show DNS and proxy status")
+@click.option("--quiet", "-q", is_flag=True, help="Machine-readable output (exit code only)")
+def check(verbose, quiet):
     """Check system requirements and status"""
-    if check_system():
-        console.print("\n[bold green]✅ All systems ready![/bold green]")
+    if not quiet:
+        if check_system():
+            console.print("\n[bold green]✅ All systems ready![/bold green]")
+
+            # Check DNS and proxy if verbose
+            if PROXY_AVAILABLE and verbose:
+                console.print("\n[bold]DNS & Proxy Status:[/bold]")
+                dns_mgr = DNSManager()
+                proxy_mgr = ProxyManager()
+
+                dns_configured = dns_mgr.is_configured() and dns_mgr.is_resolver_configured()
+                proxy_running = proxy_mgr.is_running()
+
+                dns_status = "[green]✓ Configured[/green]" if dns_configured else "[yellow]✗ Not configured[/yellow]"
+                proxy_status = "[green]✓ Running[/green]" if proxy_running else "[yellow]✗ Not running[/yellow]"
+
+                console.print(f"  DNS (*.local):   {dns_status}")
+                console.print(f"  Proxy (port 80): {proxy_status}")
+
+                if not dns_configured or not proxy_running:
+                    console.print("\n[dim]Setup commands:[/dim]")
+                    if not dns_configured:
+                        console.print("  [cyan]lab dns setup[/cyan]")
+                    if not proxy_running:
+                        console.print("  [cyan]lab proxy start[/cyan]")
+        else:
+            console.print("\n[bold red]❌ Some requirements are missing.[/bold red]")
+            sys.exit(1)
     else:
-        console.print("\n[bold red]❌ Some requirements are missing.[/bold red]")
-        sys.exit(1)
+        # Quiet mode - just exit with status code
+        if not check_system():
+            sys.exit(1)
+        sys.exit(0)
 
 
 @cli.command()
