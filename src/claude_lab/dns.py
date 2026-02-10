@@ -175,18 +175,31 @@ class DNSManager:
         table.add_column("Status")
 
         for domain in test_domains:
+            # Use dscacheutil on macOS which respects /etc/resolver
             result = subprocess.run(
-                ["nslookup", domain],
+                ["dscacheutil", "-q", "host", "-a", "name", domain],
                 capture_output=True,
                 text=True
             )
 
-            if "127.0.0.1" in result.stdout:
+            # Check if resolved to 127.0.0.1
+            if "127.0.0.1" in result.stdout or "ip_address: 127.0.0.1" in result.stdout:
                 table.add_row(domain, "127.0.0.1", "✅")
             else:
-                table.add_row(domain, "Failed", "❌")
+                # Fallback to ping test (more reliable)
+                ping_result = subprocess.run(
+                    ["ping", "-c", "1", "-t", "1", domain],
+                    capture_output=True,
+                    text=True
+                )
+                if "127.0.0.1" in ping_result.stdout:
+                    table.add_row(domain, "127.0.0.1", "✅")
+                else:
+                    table.add_row(domain, "Not resolved", "❌")
 
         console.print(table)
+        console.print("\n[dim]Note: These are test domains to verify DNS is working.[/dim]")
+        console.print("[dim]They don't need actual services - just need to resolve to 127.0.0.1[/dim]")
 
     def setup(self):
         """Complete DNS setup workflow"""
@@ -194,6 +207,15 @@ class DNSManager:
             "[bold cyan]Claude Lab DNS Setup[/bold cyan]\n"
             "Configure wildcard DNS for *.local domains"
         ))
+
+        # Pre-authenticate sudo to avoid multiple password prompts
+        console.print("\n[bold]Authenticating sudo access...[/bold]")
+        console.print("[dim]You'll be prompted for your password once.[/dim]")
+        result = subprocess.run(["sudo", "-v"], capture_output=True)
+        if result.returncode != 0:
+            console.print("[red]✗ Sudo authentication failed[/red]")
+            return False
+        console.print("[green]✓ Sudo authenticated[/green]")
 
         # Step 1: Install dnsmasq
         console.print("\n[bold]Step 1: Install dnsmasq[/bold]")

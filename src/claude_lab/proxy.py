@@ -16,6 +16,7 @@ console = Console()
 CADDY_ADMIN_API = "http://localhost:2019"
 CADDY_CONTAINER_NAME = "claude-lab-proxy"
 CADDY_CONFIG_PATH = Path.home() / ".lab" / "caddy-config.json"
+CADDY_PORT_FILE = Path.home() / ".lab" / "caddy-port"
 
 
 class ProxyManager:
@@ -43,10 +44,20 @@ class ProxyManager:
             return False
         return True
 
+    def get_proxy_port(self) -> int:
+        """Get the port Caddy is running on (80 or 8080)"""
+        if CADDY_PORT_FILE.exists():
+            try:
+                return int(CADDY_PORT_FILE.read_text().strip())
+            except:
+                return 80
+        return 80
+
     def start(self, force: bool = False):
-        """Start Caddy proxy in Docker on port 80"""
+        """Start Caddy proxy in Docker on port 80 (or 8080 if 80 is busy)"""
         if self.is_running():
-            console.print(f"[yellow]✓ Proxy already running (container: {CADDY_CONTAINER_NAME})[/yellow]")
+            port = self.get_proxy_port()
+            console.print(f"[yellow]✓ Proxy already running on port {port} (container: {CADDY_CONTAINER_NAME})[/yellow]")
             return
 
         # Check if container exists but is stopped
@@ -62,32 +73,25 @@ class ProxyManager:
             console.print("[green]✅ Proxy started[/green]")
             return
 
-        # Check if port 80 is available
+        # Check if port 80 is available - if not, use 8080
+        proxy_port = 80
         if not self._check_port_80() and not force:
-            console.print("[red]Error: Port 80 already in use[/red]")
-
             # Show what's using it
             port_check = subprocess.run(
                 ["lsof", "-i", ":80"],
                 capture_output=True,
                 text=True
             )
+            process_name = "unknown"
             if port_check.returncode == 0:
                 lines = port_check.stdout.strip().split('\n')
                 if len(lines) > 1:
-                    process = lines[1].split()[0]  # Process name
-                    console.print(f"[dim]Currently used by: {process}[/dim]")
+                    process_name = lines[1].split()[0]
 
-                    # Check if it's Docker Desktop
-                    if "com.docker" in process.lower() or "docker" in process.lower():
-                        console.print("\n[yellow]Docker Desktop is using port 80 (Kubernetes LoadBalancer)[/yellow]")
-                        console.print("\n[bold]Options:[/bold]")
-                        console.print("  1. [cyan]Disable Kubernetes in Docker Desktop[/cyan]")
-                        console.print("     Settings → Kubernetes → Uncheck 'Enable Kubernetes'")
-                        console.print("  2. [cyan]Continue without proxy[/cyan]")
-                        console.print("     Labs work fine on ports: http://localhost:8081/")
-
-            return
+            console.print(f"[yellow]⚠️  Port 80 in use by {process_name}[/yellow]")
+            console.print("[green]✓ Using port 8080 instead (you can run both!)[/green]")
+            console.print("[dim]Access labs at: http://lab-name.local:8080/[/dim]")
+            proxy_port = 8080
 
         # Initialize base config
         base_config = {
@@ -96,7 +100,7 @@ class ProxyManager:
                 "http": {
                     "servers": {
                         "lab-proxy": {
-                            "listen": [":80"],
+                            "listen": [f":{proxy_port}"],
                             "routes": []
                         }
                     }
@@ -115,7 +119,7 @@ class ProxyManager:
             "docker", "run", "-d",
             "--name", CADDY_CONTAINER_NAME,
             "--restart", "unless-stopped",
-            "-p", "80:80",
+            "-p", f"{proxy_port}:{proxy_port}",
             "-p", "2019:2019",
             "-v", f"{CADDY_CONFIG_PATH}:/etc/caddy/config.json",
             "caddy:latest",
@@ -127,13 +131,20 @@ class ProxyManager:
             time.sleep(1)  # Give Caddy a moment to start
 
             if self.is_running():
-                console.print("[green]✅ Proxy started on port 80[/green]")
+                # Save the port for future reference
+                CADDY_PORT_FILE.parent.mkdir(exist_ok=True, parents=True)
+                CADDY_PORT_FILE.write_text(str(proxy_port))
+
+                console.print(f"[green]✅ Proxy started on port {proxy_port}[/green]")
                 console.print(f"[dim]Container: {CADDY_CONTAINER_NAME}[/dim]")
                 console.print("[dim]Admin API: http://localhost:2019[/dim]")
                 console.print("\n[bold]Next steps:[/bold]")
                 console.print("  1. Setup DNS: [cyan]lab dns setup[/cyan]")
                 console.print("  2. Create a lab: [cyan]lab setup my-lab[/cyan]")
-                console.print("  3. Access via: [cyan]http://my-lab.local/[/cyan]")
+                if proxy_port == 80:
+                    console.print("  3. Access via: [cyan]http://my-lab.local/[/cyan]")
+                else:
+                    console.print(f"  3. Access via: [cyan]http://my-lab.local:{proxy_port}/[/cyan]")
             else:
                 console.print("[red]✗ Failed to start proxy[/red]")
         except subprocess.CalledProcessError as e:
