@@ -31,6 +31,14 @@ class ProxyManager:
         )
         return CADDY_CONTAINER_NAME in result.stdout
 
+    def is_api_ready(self) -> bool:
+        """Check if Caddy admin API is accessible"""
+        try:
+            success, _ = self._call_admin_api("GET", "/config/")
+            return success
+        except:
+            return False
+
     def _check_port_80(self) -> bool:
         """Check if port 80 is available"""
         result = subprocess.run(
@@ -128,25 +136,36 @@ class ProxyManager:
 
         try:
             subprocess.run(cmd, check=True, capture_output=True)
-            time.sleep(1)  # Give Caddy a moment to start
 
-            if self.is_running():
-                # Save the port for future reference
-                CADDY_PORT_FILE.parent.mkdir(exist_ok=True, parents=True)
-                CADDY_PORT_FILE.write_text(str(proxy_port))
-
-                console.print(f"[green]✅ Proxy started on port {proxy_port}[/green]")
-                console.print(f"[dim]Container: {CADDY_CONTAINER_NAME}[/dim]")
-                console.print("[dim]Admin API: http://localhost:2019[/dim]")
-                console.print("\n[bold]Next steps:[/bold]")
-                console.print("  1. Setup DNS: [cyan]lab dns setup[/cyan]")
-                console.print("  2. Create a lab: [cyan]lab setup my-lab[/cyan]")
-                if proxy_port == 80:
-                    console.print("  3. Access via: [cyan]http://my-lab.local/[/cyan]")
-                else:
-                    console.print(f"  3. Access via: [cyan]http://my-lab.local:{proxy_port}/[/cyan]")
+            # Wait for container to be running
+            console.print("[dim]Waiting for Caddy to start...[/dim]")
+            for i in range(10):
+                time.sleep(1)
+                if self.is_running() and self.is_api_ready():
+                    break
             else:
-                console.print("[red]✗ Failed to start proxy[/red]")
+                if not self.is_running():
+                    console.print("[red]✗ Container failed to start[/red]")
+                    return
+                elif not self.is_api_ready():
+                    console.print("[yellow]⚠️  Container started but API not responding[/yellow]")
+                    console.print("[dim]Check logs: lab proxy logs[/dim]")
+                    return
+
+            # Save the port for future reference
+            CADDY_PORT_FILE.parent.mkdir(exist_ok=True, parents=True)
+            CADDY_PORT_FILE.write_text(str(proxy_port))
+
+            console.print(f"[green]✅ Proxy started on port {proxy_port}[/green]")
+            console.print(f"[dim]Container: {CADDY_CONTAINER_NAME}[/dim]")
+            console.print("[dim]Admin API: http://localhost:2019[/dim]")
+            console.print("\n[bold]Next steps:[/bold]")
+            console.print("  1. Setup DNS: [cyan]lab dns setup[/cyan]")
+            console.print("  2. Create a lab: [cyan]lab setup my-lab[/cyan]")
+            if proxy_port == 80:
+                console.print("  3. Access via: [cyan]http://my-lab.local/[/cyan]")
+            else:
+                console.print(f"  3. Access via: [cyan]http://my-lab.local:{proxy_port}/[/cyan]")
         except subprocess.CalledProcessError as e:
             console.print(f"[red]✗ Failed to start proxy: {e.stderr.decode()}[/red]")
 
@@ -221,6 +240,24 @@ class ProxyManager:
             console.print("[dim]Proxy not running, skipping route registration[/dim]")
             console.print(f"[dim]💡 Start proxy: lab proxy start[/dim]")
             return
+
+        # Check if API is ready
+        if not self.is_api_ready():
+            console.print("[yellow]⚠️  Proxy container running but API not ready yet[/yellow]")
+            console.print("[dim]Waiting for Caddy to start (this may take a few seconds)...[/dim]")
+
+            # Wait up to 10 seconds for API to be ready
+            import time
+            for i in range(10):
+                time.sleep(1)
+                if self.is_api_ready():
+                    console.print("[green]✓ Proxy API ready[/green]")
+                    break
+            else:
+                console.print("[yellow]⚠️  Proxy API still not ready after 10 seconds[/yellow]")
+                console.print("[dim]Check proxy logs: lab proxy logs[/dim]")
+                console.print("[dim]Restart proxy: lab proxy restart[/dim]")
+                return
 
         route = {
             "@id": f"lab-{lab_name}",
