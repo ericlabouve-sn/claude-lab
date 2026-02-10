@@ -391,25 +391,42 @@ def setup(name, branch, image):
             console.print("\n[yellow]⚠️  DNS not configured for *.local domains[/yellow]")
             console.print("[dim]Without DNS, you'll need port numbers: http://localhost:8081[/dim]")
             console.print("[dim]With DNS: http://lab-name.local/ (seamless!)[/dim]")
-            console.print("\n[cyan]To configure DNS:[/cyan] lab dns setup")
 
-            if not click.confirm("\nContinue without DNS setup?", default=True):
-                console.print("[yellow]Cancelled. Run 'lab dns setup' first.[/yellow]")
-                sys.exit(0)
+            # Offer to run DNS setup now
+            if click.confirm("\nRun DNS setup now? (requires sudo)", default=False):
+                console.print()
+                if dns_mgr.setup():
+                    console.print("\n[green]✅ DNS configured successfully![/green]")
+                    dns_configured = True
+                else:
+                    console.print("\n[yellow]⚠️  DNS setup incomplete[/yellow]")
+                    if not click.confirm("\nContinue anyway?", default=True):
+                        console.print("[yellow]Cancelled. Retry DNS setup with: lab dns setup[/yellow]")
+                        sys.exit(0)
+            else:
+                console.print("\n[dim]Skipping DNS setup. Run manually: lab dns setup[/dim]")
+                if not click.confirm("\nContinue without DNS?", default=True):
+                    console.print("[yellow]Cancelled. Run 'lab dns setup' first.[/yellow]")
+                    sys.exit(0)
             console.print()
 
         # Check if proxy is running
-        if not proxy_running and dns_configured:
-            console.print("[yellow]⚠️  Reverse proxy not running[/yellow]")
-            console.print("[dim]DNS is configured, but you need the proxy for domain access.[/dim]")
+        if not proxy_running:
+            if dns_configured:
+                console.print("[yellow]⚠️  Reverse proxy not running[/yellow]")
+                console.print("[dim]DNS is configured, but you need the proxy for domain access.[/dim]")
 
-            if click.confirm("\nStart reverse proxy now?", default=True):
-                console.print()
-                proxy_mgr.start()
-                console.print()
+                if click.confirm("\nStart reverse proxy now?", default=True):
+                    console.print()
+                    proxy_mgr.start()
+                    console.print()
+                else:
+                    console.print("[dim]Skipping proxy. Start later: lab proxy start[/dim]")
+                    console.print()
             else:
-                console.print("[dim]Skipping proxy. Start later: lab proxy start[/dim]")
-                console.print()
+                # DNS not configured, but mention proxy anyway
+                console.print("[dim]💡 For seamless access, you'll also need the reverse proxy[/dim]")
+                console.print("[dim]   After DNS is configured, run: lab proxy start[/dim]")
 
     # Load project settings
     worktree_dir = get_project_setting("worktree_dir", "..")
