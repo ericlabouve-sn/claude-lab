@@ -585,6 +585,7 @@ def setup(name, branch, image, yes, no_interactive):
         # Add additional mounts from settings (global or project)
         merged_settings, has_project, has_global = get_merged_settings()
         additional_mounts = merged_settings.get("additional_mounts", [])
+        project_env = merged_settings.get("environment", {})
         for mount_spec in additional_mounts:
             # Parse mount spec: source:target:mode or source:target
             parts = mount_spec.split(":")
@@ -600,38 +601,14 @@ def setup(name, branch, image, yes, no_interactive):
                         config_mounts.append(f"type=bind,source={source},target={target}")
 
         # Build docker sandbox command
-        sandbox_cmd = "docker sandbox run claude ."
-        if image:
-            # Use custom image
-            sandbox_cmd = f"docker sandbox run --image {image} ."
+        # docker sandbox run automatically mounts the workspace
+        # For now, keep it simple - custom env vars and mounts can be added later
 
-        cmd_parts = [
-            f"cd {target_dir}",
-            sandbox_cmd,
-            f"--env KUBECONFIG=/.kubeconfig-{name}",
-        ]
+        template_flag = f"-t {image}" if image else ""
+        sandbox_name = f"lab-{name}"
 
-        # Add environment variables from settings (global or project)
-        project_env = merged_settings.get("environment", {})
-        for key, value in project_env.items():
-            cmd_parts.append(f"--env {key}={value}")
-
-        if ssh_auth:
-            cmd_parts.extend([
-                f"--env SSH_AUTH_SOCK={ssh_auth}",
-                f"--mount {ssh_mount}",
-            ])
-
-        # Mount kubeconfig
-        cmd_parts.append(f"--mount type=bind,source={kubeconfig},target=/.kubeconfig-{name}")
-
-        # Mount all config files
-        for mount in config_mounts:
-            cmd_parts.append(f"--mount {mount}")
-
-        cmd_parts.append("-- --dangerously-skip-permissions")
-
-        cmd = " ".join(cmd_parts)
+        # Simple command that works with docker sandbox syntax
+        cmd = f"cd {target_dir} && docker sandbox run {template_flag} --name {sandbox_name} claude . -- --dangerously-skip-permissions"
 
         # Launch in tmux
         subprocess.run(
@@ -799,6 +776,15 @@ def teardown(name, force):
             stderr=subprocess.DEVNULL,
         )
         progress.update(task3, completed=True)
+
+        # 4. Remove Docker sandbox
+        task4 = progress.add_task("Removing Docker sandbox...", total=None)
+        subprocess.run(
+            ["docker", "sandbox", "rm", f"lab-{name}"],
+            stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+        )
+        progress.update(task4, completed=True)
 
     # Unregister from proxy if running
     if PROXY_AVAILABLE:
