@@ -101,37 +101,20 @@ class ProxyManager:
             console.print("[dim]Access labs at: http://lab-name.local:8090/[/dim]")
             proxy_port = 8090
 
-        # Initialize base config
-        base_config = {
-            "admin": {"listen": "0.0.0.0:2019"},
-            "apps": {
-                "http": {
-                    "servers": {
-                        "lab-proxy": {
-                            "listen": [f":{proxy_port}"],
-                            "routes": []
-                        }
-                    }
-                }
-            }
-        }
-
-        # Ensure config directory exists
-        CADDY_CONFIG_PATH.parent.mkdir(exist_ok=True, parents=True)
-        CADDY_CONFIG_PATH.write_text(json.dumps(base_config, indent=2))
-
         console.print("[dim]Starting Caddy proxy container...[/dim]")
 
-        # Start Caddy container
+        # Start Caddy container with default config
+        # We'll load our config via API after it starts
+        # Use CADDY_ADMIN env var to make API accessible from host
         cmd = [
             "docker", "run", "-d",
             "--name", CADDY_CONTAINER_NAME,
             "--restart", "unless-stopped",
             "-p", f"{proxy_port}:{proxy_port}",
             "-p", "2019:2019",
-            "-v", f"{CADDY_CONFIG_PATH}:/etc/caddy/config.json",
+            "-e", "CADDY_ADMIN=0.0.0.0:2019",
             "caddy:latest",
-            "caddy", "run", "--config", "/etc/caddy/config.json", "--adapter", "json"
+            "caddy", "run"
         ]
 
         try:
@@ -155,6 +138,26 @@ class ProxyManager:
             # Save the port for future reference
             CADDY_PORT_FILE.parent.mkdir(exist_ok=True, parents=True)
             CADDY_PORT_FILE.write_text(str(proxy_port))
+
+            # Load initial config via API
+            console.print("[dim]Configuring Caddy via admin API...[/dim]")
+            base_config = {
+                "apps": {
+                    "http": {
+                        "servers": {
+                            "lab-proxy": {
+                                "listen": [f":{proxy_port}"],
+                                "routes": []
+                            }
+                        }
+                    }
+                }
+            }
+
+            success, response = self._call_admin_api("POST", "/config/", base_config)
+            if not success:
+                console.print(f"[yellow]⚠️  Failed to configure Caddy: {response}[/yellow]")
+                console.print("[dim]Container started but may not work correctly[/dim]")
 
             console.print(f"[green]✅ Proxy started on port {proxy_port}[/green]")
             console.print(f"[dim]Container: {CADDY_CONTAINER_NAME}[/dim]")
