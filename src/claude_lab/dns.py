@@ -210,10 +210,14 @@ class DNSManager:
         if not self.configure_resolver():
             return False
 
-        # Step 4: Start dnsmasq
-        console.print("\n[bold]Step 4: Start dnsmasq[/bold]")
-        if not self.start():
-            return False
+        # Step 4: Restart dnsmasq (to apply new config)
+        console.print("\n[bold]Step 4: Restart dnsmasq[/bold]")
+        if self.is_running():
+            console.print("[dim]Restarting dnsmasq to apply configuration...[/dim]")
+            self.restart()
+        else:
+            if not self.start():
+                return False
 
         # Step 5: Test
         console.print("\n[bold]Step 5: Test DNS resolution[/bold]")

@@ -65,7 +65,28 @@ class ProxyManager:
         # Check if port 80 is available
         if not self._check_port_80() and not force:
             console.print("[red]Error: Port 80 already in use[/red]")
-            console.print("[dim]Use --force to stop conflicting services[/dim]")
+
+            # Show what's using it
+            port_check = subprocess.run(
+                ["lsof", "-i", ":80"],
+                capture_output=True,
+                text=True
+            )
+            if port_check.returncode == 0:
+                lines = port_check.stdout.strip().split('\n')
+                if len(lines) > 1:
+                    process = lines[1].split()[0]  # Process name
+                    console.print(f"[dim]Currently used by: {process}[/dim]")
+
+                    # Check if it's Docker Desktop
+                    if "com.docker" in process.lower() or "docker" in process.lower():
+                        console.print("\n[yellow]Docker Desktop is using port 80 (Kubernetes LoadBalancer)[/yellow]")
+                        console.print("\n[bold]Options:[/bold]")
+                        console.print("  1. [cyan]Disable Kubernetes in Docker Desktop[/cyan]")
+                        console.print("     Settings → Kubernetes → Uncheck 'Enable Kubernetes'")
+                        console.print("  2. [cyan]Continue without proxy[/cyan]")
+                        console.print("     Labs work fine on ports: http://localhost:8081/")
+
             return
 
         # Initialize base config

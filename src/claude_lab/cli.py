@@ -490,11 +490,28 @@ def setup(name, branch, image, yes, no_interactive):
     ) as progress:
         # 1. Git Worktree
         task1 = progress.add_task("Creating git worktree...", total=None)
-        subprocess.run(
+        result = subprocess.run(
             ["git", "worktree", "add", str(target_dir), branch],
-            check=True,
             capture_output=True,
+            text=True,
         )
+
+        if result.returncode != 0:
+            progress.stop()
+            console.print(f"\n[red]✗ Failed to create git worktree[/red]")
+
+            # Check if branch is already checked out
+            if "already used by worktree" in result.stderr or "already checked out" in result.stderr:
+                console.print(f"[yellow]Branch '{branch}' is already checked out.[/yellow]")
+                console.print("\n[bold]Solutions:[/bold]")
+                console.print(f"  1. Use a different branch: [cyan]lab setup {name} --branch <other-branch>[/cyan]")
+                console.print(f"  2. Create from current HEAD: [cyan]git checkout -b lab/{name} && lab setup {name}[/cyan]")
+                console.print(f"  3. Use existing worktree location")
+            else:
+                console.print(f"[dim]Error: {result.stderr}[/dim]")
+
+            sys.exit(1)
+
         progress.update(task1, completed=True)
 
         # 2. k3d Cluster
