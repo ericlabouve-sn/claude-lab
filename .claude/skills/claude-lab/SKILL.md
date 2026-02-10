@@ -142,15 +142,31 @@ environment:
 ### Starting a New Lab Environment
 
 ```bash
-lab setup --name <environment-name>
+# Create lab from current branch
+lab setup <name>
+
+# Create lab on specific branch (auto-creates branch if it doesn't exist)
+lab setup <name> --branch <branch-name>
+
+# Examples:
+lab setup feature-auth                    # Uses current branch
+lab setup feature-api --branch develop    # Uses develop branch
+lab setup bugfix-123 --branch fix/issue-123  # Creates fix/issue-123 if needed
 ```
 
+**Branch behavior:**
+- If `--branch` not specified → Uses current branch
+- If `--branch` specified and exists → Checks out that branch
+- If `--branch` specified but doesn't exist → **Automatically creates it from current HEAD**
+
 This will:
-1. Create a git worktree at `${worktree_dir}/<environment-name>` based on the current branch
-2. Spin up a k3d cluster with unique ports (automatically assigned)
-3. Generate a kubeconfig patched for Docker host access
-4. Mount your SSH identity for git operations
-5. Launch a Claude Sandbox in a tmux session
+1. Create (or verify) the specified git branch
+2. Create a git worktree at `${worktree_dir}/<name>`
+3. Spin up a k3d cluster with unique ports (automatically assigned)
+4. Generate a kubeconfig patched for Docker host access
+5. Mount your SSH identity for git operations
+6. Launch a Claude Sandbox in a tmux session
+7. Auto-register routes with proxy (if running)
 
 ### Listing Active Environments
 

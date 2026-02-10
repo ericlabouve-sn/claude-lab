@@ -449,6 +449,22 @@ def setup(name, branch, image, yes, no_interactive):
         branch = subprocess.check_output(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"]
         ).decode().strip()
+    else:
+        # Check if branch exists
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", f"refs/heads/{branch}"],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            # Branch doesn't exist - create it from current HEAD
+            console.print(f"[yellow]Branch '{branch}' doesn't exist.[/yellow]")
+            console.print(f"[green]Creating new branch '{branch}' from current HEAD...[/green]")
+            subprocess.run(
+                ["git", "branch", branch],
+                check=True,
+                capture_output=True
+            )
 
     # Use project-configured worktree directory
     parent_dir = Path(worktree_dir).resolve()
@@ -683,15 +699,26 @@ def setup(name, branch, image, yes, no_interactive):
 
         if proxy.is_running():
             console.print(f"\n[dim]Registering routes with proxy...[/dim]")
-            proxy.register_lab(name, port)
+            # Try to register, but don't fail if proxy API isn't ready yet
+            try:
+                proxy.register_lab(name, port)
+                proxy_port = proxy.get_proxy_port()
 
-            if dns_ready:
-                console.print(f"\n[bold green]🌐 Access via: http://{name}.local/[/bold green]")
-                console.print(f"[dim]Subdomains also work: http://subdomain.{name}.local/[/dim]")
-            else:
-                console.print(f"\n[yellow]⚠️  Proxy running but DNS not configured[/yellow]")
+                if dns_ready:
+                    if proxy_port == 80:
+                        console.print(f"\n[bold green]🌐 Access via: http://{name}.local/[/bold green]")
+                    else:
+                        console.print(f"\n[bold green]🌐 Access via: http://{name}.local:{proxy_port}/[/bold green]")
+                    console.print(f"[dim]Or subdomains: http://subdomain.{name}.local:{proxy_port if proxy_port != 80 else ''}[/dim]")
+                else:
+                    console.print(f"\n[yellow]⚠️  Proxy running but DNS not configured[/yellow]")
+                    console.print(f"[dim]Access via: http://localhost:{port}/[/dim]")
+                    console.print(f"[dim]For domain access, run: lab dns setup[/dim]")
+            except Exception as e:
+                # Proxy container exists but API not ready yet
+                console.print(f"\n[yellow]⚠️  Could not register routes (proxy still starting?)[/yellow]")
                 console.print(f"[dim]Access via: http://localhost:{port}/[/dim]")
-                console.print(f"[dim]For domain access, run: lab dns setup[/dim]")
+                console.print(f"[dim]Routes will auto-register when proxy is ready[/dim]")
         else:
             if dns_ready:
                 console.print(f"\n[yellow]💡 DNS ready but proxy not running:[/yellow]")
