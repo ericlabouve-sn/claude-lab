@@ -1,7 +1,7 @@
 ---
 name: claude-lab
 description: Use this skill when you need to start a new branch/task in an isolated environment with its own k3d cluster, git worktree, and tmux session. Supports GUI mode, global/project settings, custom Docker images, and seamless domain access via reverse proxy.
-argument-hint: setup <name> [--branch <branch>] [--image <image>] | list | teardown <name> | gui | proxy start | dns setup | init [--global]
+argument-hint: setup <name> [--branch <branch>] [--no-interactive] | list | teardown <name> | gui | proxy start | dns setup | check [--verbose] | init [--global]
 user-invocable: true
 ---
 
@@ -24,6 +24,79 @@ Use this skill when you need to start a new branch/task in an isolated environme
 - **Image Management:** Build, manage, and customize Docker images with pre-installed tools (kubectl, helm, k9s, etc.)
 
 ## Instructions
+
+### For Claude Code: Automated Lab Setup
+
+**When creating labs programmatically, use non-interactive mode:**
+
+```bash
+# Recommended: Skip all interactive prompts
+lab setup <name> --no-interactive
+
+# Or: Auto-confirm all prompts
+lab setup <name> --yes
+
+# With specific branch
+lab setup <name> --branch <branch> --no-interactive
+```
+
+**Check if DNS and proxy are configured:**
+
+```bash
+# Quick check (exit code only)
+lab check --quiet
+# Exit code 0 = ready, 1 = not ready
+
+# Detailed check
+lab check --verbose
+# Shows DNS and proxy status
+
+# Check individual components
+lab dns status    # DNS configuration status
+lab proxy status  # Proxy running status
+```
+
+**Recommended workflow for Claude Code:**
+
+1. **First-time setup** (one per machine):
+   ```bash
+   # Check system requirements
+   lab check --quiet || exit 1
+
+   # If DNS not configured, note that labs will use ports
+   # User must run: lab dns setup (requires sudo)
+   ```
+
+2. **Before creating a lab:**
+   ```bash
+   # Ensure proxy is running (idempotent, won't fail if already running)
+   lab proxy start
+   ```
+
+3. **Create the lab:**
+   ```bash
+   # No prompts, always succeeds even if DNS/proxy not configured
+   lab setup my-task --no-interactive
+   ```
+
+4. **Access the lab:**
+   - If DNS+proxy configured: `http://my-task.local/`
+   - Otherwise: `http://localhost:8081/` (check port from `lab list`)
+
+5. **Cleanup when done:**
+   ```bash
+   lab teardown my-task
+   ```
+
+**Exit codes for automation:**
+- `0` = Success
+- `1` = Failure or user cancelled
+
+**Important notes:**
+- `--no-interactive` skips DNS/proxy prompts entirely (labs still work on ports)
+- `--yes` auto-confirms prompts (useful if you want setup to run)
+- DNS setup requires `sudo` - cannot be automated without user interaction
+- Proxy can be started automatically and doesn't need sudo
 
 ### Initializing Settings
 
@@ -100,7 +173,7 @@ Launch an interactive terminal UI with:
 
 **Keyboard Controls:**
 - `↑/↓` - Navigate lab list
-- `a` - Attach to selected lab's tmux session
+- `<enter>` - Attach to selected lab's tmux session
 - `r` - Refresh all data
 - `n` - Create new lab (shows instructions)
 - `d` - Delete lab (shows instructions)
