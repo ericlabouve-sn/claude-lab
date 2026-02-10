@@ -604,15 +604,25 @@ def setup(name, branch, image, yes, no_interactive):
         # docker sandbox run automatically mounts the workspace
         # For now, keep it simple - custom env vars and mounts can be added later
 
-        template_flag = f"-t {image}" if image else ""
         sandbox_name = f"lab-{name}"
 
-        # Simple command that works with docker sandbox syntax
-        cmd = f"cd {target_dir} && docker sandbox run {template_flag} --name {sandbox_name} claude . -- --dangerously-skip-permissions"
-
-        # Launch in tmux
+        # Launch tmux session first (with a shell)
         subprocess.run(
-            ["tmux", "new-session", "-d", "-s", name, cmd],
+            ["tmux", "new-session", "-d", "-s", name, "-c", str(target_dir)],
+            check=True,
+        )
+
+        # Build docker sandbox command
+        # For custom images, we use --load-local-template to load local Docker images
+        if image:
+            docker_cmd = f"docker sandbox run --load-local-template -t {image} --name {sandbox_name} claude . -- --dangerously-skip-permissions"
+        else:
+            # Use default Claude sandbox
+            docker_cmd = f"docker sandbox run --name {sandbox_name} claude . -- --dangerously-skip-permissions"
+
+        # Send the docker command to the tmux session
+        subprocess.run(
+            ["tmux", "send-keys", "-t", name, docker_cmd, "Enter"],
             check=True,
         )
         progress.update(task4, completed=True)
