@@ -89,9 +89,9 @@ class ProxyManager:
                     process_name = lines[1].split()[0]
 
             console.print(f"[yellow]⚠️  Port 80 in use by {process_name}[/yellow]")
-            console.print("[green]✓ Using port 8080 instead (you can run both!)[/green]")
-            console.print("[dim]Access labs at: http://lab-name.local:8080/[/dim]")
-            proxy_port = 8080
+            console.print("[green]✓ Using port 8090 instead (you can run both!)[/green]")
+            console.print("[dim]Access labs at: http://lab-name.local:8090/[/dim]")
+            proxy_port = 8090
 
         # Initialize base config
         base_config = {
